@@ -32,6 +32,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (savedTab && document.getElementById(savedTab)) {
     verTab(savedTab);
   }
+
+  // Inicializar Flatpickr (Selector de Fecha Enterprise)
+  const inputFecha = document.getElementById('modal-fecha');
+  if (inputFecha && typeof flatpickr !== 'undefined') {
+    flatpickr(inputFecha, {
+      enableTime: true,
+      dateFormat: "Y-m-d\\TH:i",
+      altInput: true,
+      altFormat: "d/m/Y h:i K",
+      locale: "es"
+    });
+  }
 });
 
 
@@ -107,12 +119,17 @@ function abrirModalRetiro(id, marca, tipo) {
   document.getElementById('modal-retiro').classList.add('open');
   setTimeout(() => document.getElementById('modal-persona').focus(), 100);
 
-  // Inicializar fecha actual en el input datetime-local
+  // Inicializar fecha actual en el input flatpickr
   const inputFecha = document.getElementById('modal-fecha');
   if (inputFecha) {
     const ahora = new Date();
     ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    inputFecha.value = ahora.toISOString().slice(0, 16);
+    const dateStr = ahora.toISOString().slice(0, 16);
+    if (inputFecha._flatpickr) {
+      inputFecha._flatpickr.setDate(dateStr);
+    } else {
+      inputFecha.value = dateStr;
+    }
   }
 }
 
@@ -123,7 +140,12 @@ function abrirModalEditarRetiro(data) {
   
   document.getElementById('form-retiro').action = `/pedido/${data.id}/editar_retiro`;
   document.getElementById('modal-persona').value = data.persona || '';
-  document.getElementById('modal-fecha').value = data.fecha || '';
+  const inputFecha = document.getElementById('modal-fecha');
+  if (inputFecha._flatpickr) {
+    inputFecha._flatpickr.setDate(data.fecha || '');
+  } else {
+    inputFecha.value = data.fecha || '';
+  }
   
   // En edición usualmente ya tienen bultos, ocultamos el grupo
   document.getElementById('modal-group-bultos').style.display = 'none';
@@ -277,6 +299,11 @@ function abrirRetiroMasivo() {
   if (inputFecha) {
     const ahora = new Date();
     ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    inputFecha.value = ahora.toISOString().slice(0, 16);
+    const dateStr = ahora.toISOString().slice(0, 16);
+    if (inputFecha._flatpickr) {
+      inputFecha._flatpickr.setDate(dateStr);
+    } else {
+      inputFecha.value = dateStr;
+    }
   }
 }
