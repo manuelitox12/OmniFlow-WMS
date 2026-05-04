@@ -193,7 +193,7 @@
                   <form action="/eliminar/{{ p.id }}" method="POST" 
                         data-marca="{{ p.marca | e }}" 
                         onsubmit="return confirmarEliminar(this.dataset.marca)">
-                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                    <button type="submit" class="btn-act btn-del" title="Eliminar Registro"><i class="ph ph-trash"></i> Del</button>
                   </form>
                 </div>
               </td>
@@ -254,7 +254,7 @@
               <td class="col-actions">
                 <div class="action-grid">
                   <a href="/pedido/{{ p.id }}" class="btn-act btn-view"><i class="ph ph-eye"></i> Detalle</a>
-                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel"><i class="ph ph-download-simple"></i></a>
+                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel" title="Exportar a Excel"><i class="ph ph-download-simple"></i> XLS</a>
                   <button class="btn-act btn-ship-heavy" 
                           data-id="{{ p.id }}" 
                           data-marca="{{ p.marca | e }}" 
@@ -264,7 +264,7 @@
                   <form action="/eliminar/{{ p.id }}" method="POST" 
                         data-marca="{{ p.marca | e }}" 
                         onsubmit="return confirmarEliminar(this.dataset.marca)">
-                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                    <button type="submit" class="btn-act btn-del" title="Eliminar Registro"><i class="ph ph-trash"></i> Del</button>
                   </form>
                 </div>
               </td>
@@ -341,20 +341,20 @@
               </td>
               <td class="col-actions">
                 <div class="action-grid">
-                  <a href="/pedido/{{ p.id }}" class="btn-act btn-view"></a>
-                  <button type="button" class="btn-act btn-edit-mini" 
+                  <a href="/pedido/{{ p.id }}" class="btn-act btn-view" title="Ver Detalle"><i class="ph ph-eye"></i> Ver</a>
+                  <button type="button" class="btn-act btn-view" title="Editar Retiro"
                           data-id="{{ p.id }}" 
                           data-marca="{{ p.marca | e }}" 
                           data-persona="{{ p.retirado_por | e }}"
                           data-fecha="{{ p.retirado_en[:16].replace(' ', 'T') if p.retirado_en else '' }}"
                           onclick="abrirModalEditarRetiro(this.dataset)">
-                    
+                    <i class="ph ph-pencil-simple"></i> Editar
                   </button>
-                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel"><i class="ph ph-download-simple"></i></a>
+                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel" title="Exportar a Excel"><i class="ph ph-download-simple"></i> XLS</a>
                   <form action="/eliminar/{{ p.id }}" method="POST" 
                         data-marca="{{ p.marca | e }}" 
                         onsubmit="return confirmarEliminar(this.dataset.marca)">
-                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                    <button type="submit" class="btn-act btn-del" title="Eliminar Registro"><i class="ph ph-trash"></i> Del</button>
                   </form>
                 </div>
               </td>
