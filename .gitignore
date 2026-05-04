@@ -1,0 +1,40 @@
+# Entornos virtuales
+env/
+venv/
+.env
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bases de datos SQLite y archivos de entorno
+*.db
+*.sqlite
+*.sqlite3
+
+# Archivos de datos procesados o temporales (Excel, CSV)
+*.xlsx
+*.xls
+*.csv
+scratch/
+
+# Archivos de log
+*.log
+
+# Scripts de pruebas temporales o desarrollo local
+test.txt
+check_*.py
+cleanup_*.py
+restore_*.py
+harden_*.py
+migrate_*.py
+test_split.py
+dev.bat
+iniciar_app.bat
+iniciar_app_oculto.vbs
+Iniciar_Sistema.bat
+
+# OS generated files
+.DS_Store
+Thumbs.db

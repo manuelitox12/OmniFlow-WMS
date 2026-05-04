@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+<!--
+  catalogo.html — Gestión de marcas, personas y personal
+  =======================================================
+  v9: Agrega panel de Personal (empleados de bodega)
+      con nombre, apellido y cédula.
+      La tabla personal se usa para asignar empleados a secciones
+      y en el futuro calcular estadísticas de rendimiento.
+-->
+
+{% block title %}Catálogos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Gestión de <em>Catálogos</em></h1>
+  <p>Administra las marcas, personas y el personal de bodega que aparece en los formularios.</p>
+</div>
+
+<!-- Primera fila: Marcas + Personas -->
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+
+  <!--  Panel de Marcas  -->
+  <div class="card">
+    <h2 style="font-family:var(--font-head); font-size:1.1rem; margin-bottom:1.2rem;">
+       Marcas / Pedidos
+    </h2>
+
+    <div class="flex gap-2 mb-4">
+      <input type="text" id="nueva-marca" placeholder="Nueva marca..." style="flex:1;" />
+      <button class="btn btn-secondary btn-sm" onclick="agregarMarca()">+ Agregar</button>
+    </div>
+
+    <div style="max-height: 350px; overflow-y:auto;">
+      {% for marca in marcas %}
+      <div class="flex justify-between items-center" style="padding:.6rem 0; border-bottom:1px solid var(--border);">
+        <span>{{ marca['nombre'] }}</span>
+        <form action="/eliminar_marca/{{ marca['id'] }}" method="POST" style="margin:0;"
+              onsubmit="return confirm('¿Eliminar {{ marca.nombre }}?')">
+          <button type="submit" class="btn btn-danger"></button>
+        </form>
+      </div>
+      {% endfor %}
+      {% if not marcas %}
+      <div class="empty-state"><div class="icon"></div><p>Sin marcas registradas</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!--  Panel de Personas (digitado / dictado)  -->
+  <div class="card">
+    <h2 style="font-family:var(--font-head); font-size:1.1rem; margin-bottom:.25rem;">
+       Transportistas / Encargados de Retiro
+    </h2>
+    <p style="font-size:.75rem; color:var(--muted); margin-bottom:1rem;">
+      <strong>Catálogo Externo:</strong> Choferes, clientes o terceros que retiran mercancía.
+    </p>
+
+    <div class="flex gap-2 mb-4">
+      <input type="text" id="nueva-persona" placeholder="Nombre completo..." style="flex:1;" />
+      <button class="btn btn-secondary btn-sm" onclick="agregarPersona()">+ Agregar</button>
+    </div>
+
+    <div style="max-height: 350px; overflow-y:auto;">
+      {% for persona in personas %}
+      <div class="flex justify-between items-center" style="padding:.6rem 0; border-bottom:1px solid var(--border);">
+        <span>{{ persona['nombre'] }}</span>
+        <form action="/eliminar_persona/{{ persona['id'] }}" method="POST" style="margin:0;"
+              onsubmit="return confirm('¿Eliminar {{ persona.nombre }}?')">
+          <button type="submit" class="btn btn-danger"></button>
+        </form>
+      </div>
+      {% endfor %}
+      {% if not personas %}
+      <div class="empty-state"><div class="icon"></div><p>Sin personas registradas</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Segunda fila: Personal de Bodega (tabla completa) -->
+<div class="card">
+  <h2 style="font-family:var(--font-head); font-size:1.1rem; margin-bottom:.25rem;">
+     Personal de Bodega
+  </h2>
+  <p style="font-size:.75rem; color:var(--muted); margin-bottom:1.2rem;">
+    Empleados que trabajan en las secciones. Se asocian a cada pasillo al registrar tiempos
+    y en el futuro permitirán ver estadísticas de rendimiento por empleado.
+  </p>
+
+  <!-- Formulario agregar personal -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr auto; gap:.6rem; align-items:flex-end; margin-bottom:1.4rem; flex-wrap:wrap;">
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Nombre *</label>
+      <input type="text" id="personal-nombre" placeholder="Juan" style="width:100%;" />
+    </div>
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Apellido</label>
+      <input type="text" id="personal-apellido" placeholder="Zapata" style="width:100%;" />
+    </div>
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Cédula</label>
+      <input type="text" id="personal-cedula" placeholder="8-123-4567" style="width:100%;" />
+    </div>
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Área</label>
+      <select id="personal-area" style="width:100%; padding:.6rem; border-radius:8px; border:1px solid var(--border);">
+        <option value="bodega"> Bodega</option>
+        <option value="oficina"> Oficina</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Alm. Inicio</label>
+      <input type="time" id="personal-alm-i" value="12:00" style="width:100%;" />
+    </div>
+    <div>
+      <label style="font-size:.7rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; display:block; margin-bottom:.3rem;">Alm. Fin</label>
+      <input type="time" id="personal-alm-f" value="12:30" style="width:100%;" />
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="agregarPersonal()" style="white-space:nowrap;">
+      + Agregar
+    </button>
+  </div>
+
+  <!-- Lista de personal -->
+  {% if personal %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nombre Completo</th>
+          <th>Cédula</th>
+          <th>Área</th>
+          <th>Almuerzo</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in personal %}
+        <tr id="row-view-{{ emp.id }}">
+          <td><span class="mono">{{ emp.id }}</span></td>
+          <td>
+            <strong>{{ emp.nombre }} {{ emp.apellido }}</strong>
+          </td>
+          <td><span class="mono">{{ emp.cedula or '—' }}</span></td>
+          <td>
+            <span class="badge {{ 'badge-empaque' if emp.area == 'bodega' else 'badge-pendiente' }}" style="font-size:.65rem;">
+              {{ ' Bodega' if emp.area == 'bodega' else ' Oficina' }}
+            </span>
+          </td>
+          <td class="mono" style="font-size:.8rem;">{{ emp.almuerzo_inicio }} - {{ emp.almuerzo_fin }}</td>
+          <td>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" data-id="{{ emp.id }}" onclick="toggleEdit(this.dataset.id)" title="Editar"></button>
+              <form action="/eliminar_personal/{{ emp.id }}" method="POST" style="margin:0;"
+                    onsubmit="return confirm('¿Eliminar a {{ emp.nombre }} {{ emp.apellido }}?')">
+                <button type="submit" class="btn btn-danger"></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <tr id="row-edit-{{ emp.id }}" style="display:none; background:rgba(21,94,117,0.05);">
+          <td><span class="mono">{{ emp.id }}</span></td>
+          <td colspan="1">
+            <div style="display:flex; gap:.4rem;">
+              <input type="text" id="edit-nombre-{{ emp.id }}" value="{{ emp.nombre }}" placeholder="Nombre" style="width:50%;" />
+              <input type="text" id="edit-apellido-{{ emp.id }}" value="{{ emp.apellido or '' }}" placeholder="Apellido" style="width:50%;" />
+            </div>
+          </td>
+          <td><input type="text" id="edit-cedula-{{ emp.id }}" value="{{ emp.cedula or '' }}" style="width:100%;" /></td>
+          <td>
+            <select id="edit-area-{{ emp.id }}" style="width:100%; padding:.4rem; border-radius:6px; border:1px solid var(--border);">
+              <option value="bodega" {{ 'selected' if emp.area == 'bodega' }}>Bodega</option>
+              <option value="oficina" {{ 'selected' if emp.area == 'oficina' }}>Oficina</option>
+            </select>
+          </td>
+          <td>
+            <div style="display:flex; gap:.2rem; align-items:center;">
+              <input type="time" id="edit-alm-i-{{ emp.id }}" value="{{ emp.almuerzo_inicio }}" style="padding:.2rem; font-size:.75rem;" />
+              <input type="time" id="edit-alm-f-{{ emp.id }}" value="{{ emp.almuerzo_fin }}" style="padding:.2rem; font-size:.75rem;" />
+            </div>
+          </td>
+          <td>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-primary btn-sm" data-id="{{ emp.id }}" onclick="savePersonal(this.dataset.id)"></button>
+              <button type="button" class="btn btn-secondary btn-sm" data-id="{{ emp.id }}" onclick="toggleEdit(this.dataset.id)"></button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"></div>
+    <p>Sin personal registrado. Agrega empleados de bodega arriba.</p>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:1rem; padding:.75rem 1rem; background:rgba(13,42,110,.05); border-left:3px solid var(--navy); border-radius:6px; font-size:.78rem; color:var(--navy);">
+     <strong>Estadísticas futuras:</strong> Cada vez que asignas un empleado a una sección en el detalle del pedido,
+    el sistema guarda el inicio, fin y quién lo atendió. Cuando quieras activar las estadísticas de rendimiento
+    (ej: qué empleado saca más rápido cada pasillo, o en qué horario hay mejor rendimiento), los datos ya estarán listos.
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/catalogo.js') }}"></script>
+{% endblock %}

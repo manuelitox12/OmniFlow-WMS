@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración de Empresa{% endblock %}
+
+{% block extra_head %}
+<style>
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 2.5rem;
+    align-items: start;
+  }
+  
+  .preview-card {
+    position: sticky;
+    top: 100px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+  }
+  
+  .preview-logo {
+    max-width: 180px;
+    max-height: 80px;
+    margin: 0 auto 1.5rem;
+    display: block;
+    object-fit: contain;
+  }
+  
+  .preview-swatches {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+  
+  .swatch {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    position: relative;
+  }
+  
+  .swatch span {
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .color-picker-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .color-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--surface2);
+    padding: 0.5rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  
+  input[type="color"] {
+    width: 40px;
+    height: 40px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .upload-area {
+    border: 2px dashed var(--border);
+    padding: 2rem;
+    border-radius: 15px;
+    text-align: center;
+    transition: all 0.3s;
+    cursor: pointer;
+    background: rgba(13,42,110,0.02);
+  }
+  
+  .upload-area:hover {
+    border-color: var(--navy);
+    background: rgba(13,42,110,0.05);
+  }
+
+  @media (max-width: 850px) {
+    .config-grid { grid-template-columns: 1fr; }
+    .preview-card { position: static; }
+  }
+
+  .btn-swap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    transition: transform 0.3s;
+    box-shadow: var(--shadow-md);
+  }
+  
+  .btn-swap:hover {
+    transform: rotate(180deg);
+    background: var(--navy-light, #1a3f8c);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <h1>Ajustes de <em>Identidad</em></h1>
+  <p>Personaliza cómo se ve tu sistema para este cliente específico.</p>
+</div>
+
+<div class="config-grid">
+  <!--  FORMULARIO DE CONFIGURACIÓN -->
+  <div class="card">
+    <form action="{{ url_for('configuracion.ajustes') }}" method="POST" enctype="multipart/form-data">
+      <h2 style="font-size: 1.2rem; margin-bottom: 2rem; color: var(--navy);">Información General</h2>
+      
+      <div class="form-group">
+        <label for="nombre">Nombre de la Empresa</label>
+        <input type="text" id="nombre" name="nombre" value="{{ empresa.nombre if empresa else '' }}" required placeholder="Ej: Mi Almacén S.A.">
+      </div>
+      
+      <div class="form-group">
+        <label for="subtitulo">Slogan / Subtítulo</label>
+        <input type="text" id="subtitulo" name="subtitulo" value="{{ empresa.subtitulo if empresa else '' }}" placeholder="Ej: Sistema de Gestión de Bodega">
+      </div>
+
+      <h2 style="font-size: 1.2rem; margin-top: 3rem; margin-bottom: 2rem; color: var(--navy);">Paleta de Colores</h2>
+      
+      <div class="color-picker-group">
+        <div class="form-group">
+          <label>Color Primario</label>
+          <div class="color-input-wrapper">
+             <input type="color" name="color_primario" value="{{ empresa.color_primario or '#0d2a6e' }}" onchange="updatePreview('primario', this.value)">
+             <span style="font-family: var(--font-mono); font-size: 0.8rem;">{{ empresa.color_primario or '#0d2a6e' }}</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: center;">
+             <button type="button" class="btn-swap" onclick="swapColors()" title="Invertir Colores">⇄</button>
+        </div>
+        
+        <div class="form-group">
+          <label>Color Secundario</label>
+          <div class="color-input-wrapper">
+             <input type="color" name="color_secundario" value="{{ empresa.color_secundario or '#f5c800' }}" onchange="updatePreview('secundario', this.value)">
+             <span style="font-family: var(--font-mono); font-size: 0.8rem;">{{ empresa.color_secundario or '#f5c800' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <h2 style="font-size: 1.2rem; margin-top: 3rem; margin-bottom: 2rem; color: var(--navy);">Logo de Marca</h2>
+      
+      <div class="form-group">
+        <label>Cargar Nuevo Logo (.png, .jpg, .svg)</label>
+        <div class="upload-area" onclick="document.getElementById('logo_file').click()">
+          <span style="font-size: 1.5rem;"></span>
+          <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted);">Haz clic para seleccionar o arrastra el archivo</p>
+          <input type="file" id="logo_file" name="logo_file" style="display: none;" onchange="previewImage(this)">
+        </div>
+      </div>
+
+      <div style="margin-top: 3rem;">
+        <button type="submit" class="btn btn-primary"> Guardar Cambios de Identidad</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top: 2rem;">
+    <h2 style="font-size: 1.2rem; margin-bottom: 1rem; color: var(--navy);">Gestión de Datos</h2>
+    <p style="font-size: 0.9rem; color: var(--muted); margin-bottom: 1.5rem;">Descarga una copia de seguridad local de toda tu base de datos (pedidos, usuarios, etc.). Recomendado hacerlo semanalmente de manera preventiva.</p>
+    <div>
+      <a href="{{ url_for('configuracion.descargar_respaldo') }}" class="btn btn-secondary" style="background: var(--surface2); color: var(--navy); border: 1px solid var(--border);">
+         Descargar Respaldo (.sqlite)
+      </a>
+    </div>
+  </div>
+
+  <!--  VISTA PREVIA -->
+  <div class="preview-card">
+    <h3 style="font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2.5rem;">Vista Previa en Vivo</h3>
+    
+    <div id="preview-container" style="padding: 1.5rem; background: var(--surface2); border-radius: 12px; border: 1px solid var(--border); text-align: center;">
+      <img id="logo-preview" src="{{ empresa.logo_url if empresa and empresa.logo_url else '/static/img/logo.png' }}" class="preview-logo" alt="Logo">
+      <button type="button" class="btn btn-secondary" style="font-size: 0.6rem; padding: 4px 10px; margin-top: 10px;" onclick="extractColors(document.getElementById('logo-preview'))"> Detectar Colores del Logo</button>
+      <h4 id="nombre-preview" style="font-family: var(--font-head); font-weight: 800; color: var(--navy); margin-top: 1.5rem;">{{ empresa.nombre if empresa else 'MI EMPRESA' }}</h4>
+      <p id="sub-preview" style="font-size: 0.75rem; color: var(--muted);">{{ empresa.subtitulo or 'Sistema de Bodega' }}</p>
+    </div>
+
+    <div class="preview-swatches">
+      <div id="swatch-pri" class="swatch" style="background: {{ empresa.color_primario or '#0d2a6e' }};">
+        <span>Primario</span>
+      </div>
+      <div id="swatch-sec" class="swatch" style="background: {{ empresa.color_secundario or '#f5c800' }};">
+        <span>Secundario</span>
+      </div>
+    </div>
+
+    <div style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border);">
+       <button class="btn btn-secondary" style="width: 100%; pointer-events: none;" id="btn-demo">Botón de Ejemplo</button>
+       <p style="font-size: 0.65rem; color: var(--muted); margin-top: 0.8rem;">Así se verán tus botones y elementos principales.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  function updatePreview(tipo, color) {
+    if (tipo === 'primario') {
+      document.getElementById('swatch-pri').style.background = color;
+      document.getElementById('btn-demo').style.background = color;
+      document.getElementById('btn-demo').style.color = '#fff';
+      document.getElementById('nombre-preview').style.color = color;
+      // Actualizar el texto del label si existe
+      const wrapper = document.querySelector('input[name="color_primario"]').parentElement;
+      wrapper.querySelector('span').innerText = color.toUpperCase();
+    } else {
+      document.getElementById('swatch-sec').style.background = color;
+      const wrapper = document.querySelector('input[name="color_secundario"]').parentElement;
+      wrapper.querySelector('span').innerText = color.toUpperCase();
+    }
+  }
+
+  function previewImage(input) {
+    if (input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = document.getElementById('logo-preview');
+        
+        // IMPORTANTE: Definir el evento onload ANTES de asignar el src
+        // para evitar que la imagen cargue sin que el sensor la vea.
+        img.onload = function() {
+          extractColors(img);
+        };
+        
+        img.src = e.target.result;
+      }
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
+  async function extractColors(imgElement) {
+    try {
+        console.log("Iniciando detección de colores...");
+        
+        // Crear un canvas temporal
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Para evitar errores de seguridad (CORS), convertimos la imagen a una nueva
+        // cargada vía Base64 si es necesario.
+        let tempImg = new Image();
+        tempImg.crossOrigin = "anonymous";
+        
+        // Promesa para cargar la imagen de forma segura
+        const loadImg = new Promise((resolve, reject) => {
+            tempImg.onload = () => resolve();
+            tempImg.onerror = () => reject("Error al cargar imagen para análisis");
+            // Si la imagen ya es un DataURL (prevista), usarla directo. 
+            // Si es una URL del servidor, forzar recarga segura.
+            tempImg.src = imgElement.src + (imgElement.src.startsWith('data') ? '' : '?v=' + Math.random());
+        });
+
+        await loadImg;
+
+        const w = tempImg.naturalWidth;
+        const h = tempImg.naturalHeight;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(tempImg, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, w, h).data;
+        const colorBuckets = {};
+        
+        for (let i = 0; i < imageData.length; i += 16) {
+            const r = imageData[i], g = imageData[i+1], b = imageData[i+2], a = imageData[i+3];
+            if (a < 150) continue; 
+            
+            const {h, s, l} = rgbToHsl(r, g, b);
+            
+            // Buscar colores con "personalidad" (saturados)
+            if (s > 0.15 && l > 0.1 && l < 0.9) {
+                const hex = rgbToHex(r, g, b);
+                colorBuckets[hex] = (colorBuckets[hex] || 0) + 1;
+            }
+        }
+
+        const sorted = Object.keys(colorBuckets).sort((a, b) => colorBuckets[b] - colorBuckets[a]);
+        
+        if (sorted.length > 0) {
+            const pri = sorted[0];
+            const sec = sorted.find(c => isDifferentEnough(pri, c)) || sorted[1] || pri;
+            
+            document.querySelector('input[name="color_primario"]').value = pri;
+            updatePreview('primario', pri);
+            
+            document.querySelector('input[name="color_secundario"]').value = sec;
+            updatePreview('secundario', sec);
+            
+            showToast(" Colores de marca aplicados");
+        } else {
+            showToast(" No se detectaron colores vivos, intenta con otro logo");
+        }
+    } catch (e) {
+        console.error("Error crítico en sensor:", e);
+        // Fallback: Si falla el canvas por seguridad, avisar al usuario
+        if (e.toString().includes("SecurityError")) {
+            alert("El navegador bloqueó el acceso a los colores por seguridad. Intenta subir el archivo de nuevo desde tu PC.");
+        }
+    }
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) h = s = 0;
+    else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return {h, s, l};
+  }
+
+  function rgbToHex(r, g, b) {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
+
+  function isDifferentEnough(h1, h2) {
+    const r1 = parseInt(h1.slice(1,3), 16), g1 = parseInt(h1.slice(3,5), 16), b1 = parseInt(h1.slice(5,7), 16);
+    const r2 = parseInt(h2.slice(1,3), 16), g2 = parseInt(h2.slice(3,5), 16), b2 = parseInt(h2.slice(5,7), 16);
+    const dist = Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
+    return dist > 60;
+  }
+
+  function swapColors() {
+    const inputPri = document.querySelector('input[name="color_primario"]');
+    const inputSec = document.querySelector('input[name="color_secundario"]');
+    
+    const temp = inputPri.value;
+    inputPri.value = inputSec.value;
+    inputSec.value = temp;
+    
+    updatePreview('primario', inputPri.value);
+    updatePreview('secundario', inputSec.value);
+    
+    showToast("⇄ Colores invertidos");
+  }
+
+  function showToast(msg) {
+    const div = document.createElement('div');
+    div.innerText = msg;
+    div.style = "position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; padding:12px 20px; border-radius:8px; box-shadow:var(--shadow-lg); z-index:9999; animation: slideUp 0.3s ease;";
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 4000);
+  }
+
+  // Inicializar preview de botón
+  document.getElementById('btn-demo').style.background = "{{ empresa.color_primario or '#0d2a6e' }}";
+  document.getElementById('btn-demo').style.color = "#fff";
+</script>
+
+{% endblock %}

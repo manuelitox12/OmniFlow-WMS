@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<!--
+  base.html — Plantilla base (Marca Blanca)
+  ============================================
+  NOTA PARA DESARROLLADORES:
+  Los datos de empresa (nombre, colores, logo) se leen dinámicamente desde
+  g.empresa, que se carga en cada request via auth.py/cargar_empresa().
+  Para cambiar la marca, actualiza la tabla `empresa` en la BD.
+  
+  Los colores corporativos por defecto son:
+    - Primario:   #0d2a6e (azul marino)
+    - Secundario: #f5c800 (amarillo)
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Bodega{% endblock %} · {{ g.empresa['nombre'] if g.empresa else 'Sistema' }}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  
+  {% if g.empresa %}
+  <style>
+    :root {
+      --navy: {{ g.empresa.color_primario or '#2563eb' }};
+      --navy-dark: {{ g.empresa.color_primario or '#1e40af' }};
+      --yellow: {{ g.empresa.color_secundario or '#64748b' }};
+      --yellow-dark: {{ g.empresa.color_secundario or '#475569' }};
+    }
+  </style>
+  {% endif %}
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-brand">
+    <!-- Logo dinámico desde BD -->
+    {% if g.empresa and g.empresa.get('logo_url') %}
+      <img src="{{ g.empresa.get('logo_url') }}" alt="Logo Empresa" class="nav-logo-img" style="max-height: 50px; margin-right: 15px; border-radius: 4px;">
+    {% else %}
+      {% set color1 = g.empresa['color_primario']  if g.empresa else '#2563eb' %}
+      {% set color2 = g.empresa['color_secundario'] if g.empresa else '#64748b' %}
+      {% set emp_nombre = g.empresa['nombre'] if g.empresa else 'EMPRESA' %}
+      <svg class="logo-oval" viewBox="0 0 260 80" xmlns="http://www.w3.org/2000/svg" style="max-height: 50px; margin-right: 15px;">
+        <ellipse cx="130" cy="40" rx="126" ry="37" fill="{{ color2 }}"/>
+        <ellipse cx="130" cy="40" rx="118" ry="30" fill="{{ color1 }}"/>
+        <text x="130" y="28" font-family="Arial,sans-serif" font-weight="900"
+              font-size="16" fill="{{ color2 }}" text-anchor="middle" letter-spacing="3">{{ emp_nombre[:12] | upper }}</text>
+        <text x="130" y="48" font-family="Arial,sans-serif" font-weight="700"
+              font-size="11" fill="#ffffff" text-anchor="middle" letter-spacing="2">{{ emp_nombre[12:] | upper if emp_nombre|length > 12 else '' }}</text>
+      </svg>
+    {% endif %}
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-brand-text">
+      <span class="line1">{{ g.empresa['subtitulo'] if g.empresa else 'Sistema de Bodega' }}</span>
+      <span class="line2">Registro de salidas</span>
+    </div>
+  </a>
+
+  <div class="nav-links">
+    <a href="/"          class="{% if request.endpoint == 'main.index'    %}active{% endif %}"><i class="ph ph-plus-circle"></i> Registrar</a>
+    <a href="/registros" class="{% if request.endpoint == 'registros.registros'%}active{% endif %}"><i class="ph ph-list-checks"></i> Pedidos</a>
+    <a href="/estadisticas" class="{% if request.endpoint == 'estadisticas.dashboard' %}active{% endif %}"><i class="ph ph-chart-line-up"></i> Rendimiento</a>
+    {% if g.user and g.user['rol'] in ('admin', 'oficina') %}
+      <a href="/catalogo"  class="{% if request.endpoint == 'catalogo.catalogo' %}active{% endif %}"><i class="ph ph-folders"></i> Catálogos</a>
+    {% endif %}
+    {% if g.user and g.user['rol'] == 'admin' %}
+      <a href="/usuarios"  class="{% if request.endpoint == 'auth.lista_usuarios' %}active{% endif %}"><i class="ph ph-users"></i> Usuarios</a>
+      <a href="/configuracion" class="{% if request.endpoint == 'configuracion.ajustes' %}active{% endif %}"><i class="ph ph-palette"></i> Identidad</a>
+    {% endif %}
+
+    <!-- Sesión del usuario actual -->
+    {% if g.user %}
+      <div style="margin-left:auto; display:flex; align-items:center; gap:0.5rem; font-size:0.75rem;">
+        <span style="color:var(--gold); opacity:0.8;">{{ g.user.get('nombre_completo') or g.user.get('username') }}</span>
+        {% set rol_color = '#f5c800' if g.user.get('rol') == 'admin' else '#93c5fd' if g.user.get('rol') == 'oficina' else '#86efac' %}
+        <span style="background:rgba(255,255,255,0.1); padding:1px 6px; border-radius:10px; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.05em; color: {{ rol_color }};">
+          {{ g.user.get('rol') }}
+        </span>
+        <a href="/logout" style="color:rgba(255,255,255,0.5); text-decoration:none; font-size:1.1rem; transition: color 0.2s;" title="Cerrar sesión" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.5)'"><i class="ph ph-sign-out"></i></a>
+      </div>
+    {% endif %}
+  </div>
+</nav>
+
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="alerts">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">
+            {% if category == 'success' %}<i class="ph ph-check-circle" style="font-size: 1.2rem;"></i>{% elif category == 'error' %}<i class="ph ph-warning-circle" style="font-size: 1.2rem;"></i>{% else %}<i class="ph ph-info" style="font-size: 1.2rem;"></i>{% endif %}
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+    {% set color1 = g.empresa.get('color_primario')  if g.empresa else '#0d2a6e' %}
+  {% set color2 = g.empresa.get('color_secundario') if g.empresa else '#f5c800' %}
+  {% set btm_nombre = g.empresa.get('nombre', 'EMPRESA') if g.empresa else 'EMPRESA' %}
+  <svg width="55" height="18" viewBox="0 0 260 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="130" cy="40" rx="126" ry="37" fill="{{ color2 }}"/>
+    <ellipse cx="130" cy="40" rx="118" ry="30" fill="{{ color1 }}"/>
+    <text x="130" y="28" font-family="Arial" font-weight="900" font-size="16" fill="{{ color2 }}" text-anchor="middle" letter-spacing="3">{{ btm_nombre[:12] | upper }}</text>
+    <text x="130" y="48" font-family="Arial" font-weight="700" font-size="11" fill="#ffffff" text-anchor="middle" letter-spacing="2">{{ btm_nombre[:24][12:] | upper }}</text>
+  </svg>
+  <span>·</span>
+  <span>{{ g.empresa.get('subtitulo', 'Sistema de Registro de Salidas') if g.empresa else 'Sistema de Registro de Salidas' }} · 2026</span>
+</footer>
+
+<script>
+  //  Atajos de Teclado (Nivel Empresarial / Accesibilidad) 
+  document.addEventListener('keydown', function(event) {
+    // Evitar activar atajos si el usuario está escribiendo en un campo de texto
+    const tagName = document.activeElement.tagName.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return;
+
+    // Alt + N -> Nuevo Registro / Ir a panel principal
+    if (event.altKey && event.key.toLowerCase() === 'n') {
+      event.preventDefault();
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/') {
+        window.location.href = "/";
+      }
+    }
+
+    // Alt + B -> Buscar (Pone el cursor en la caja de búsqueda)
+    if (event.altKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      const filterInput = document.getElementById('filterBtn'); 
+      const searchBox = document.getElementById('searchBox') || document.querySelector('input[type="search"]') || document.querySelector('input[placeholder*="Buscar"]');
+      if (searchBox) {
+        searchBox.focus();
+      }
+    }
+  });
+</script>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

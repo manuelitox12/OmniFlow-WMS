@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+<!--
+  usuarios.html — Panel de Administración de Usuarios
+  =====================================================
+  Solo accesible por usuarios con rol 'admin'.
+  Permite crear, activar/desactivar y resetear contraseñas.
+-->
+
+{% block title %}Usuarios{% endblock %}
+
+{% block extra_head %}
+<style>
+  .users-grid {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .user-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.2rem;
+    border: 1px solid #e2e6ef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    transition: box-shadow 0.2s;
+  }
+  .user-card:hover { box-shadow: 0 4px 16px rgba(13,42,110,0.06); }
+  .user-info { flex: 1; min-width: 200px; }
+  .user-name { font-family: var(--font-head); font-weight: 700; color: var(--navy); font-size: 1rem; }
+  .user-meta { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .user-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .badge-admin   { background: #0d2a6e; color: #f5c800; }
+  .badge-oficina { background: #dbeafe; color: #1e40af; }
+  .badge-bodega  { background: #ecfdf5; color: #065f46; }
+  .badge-inactivo { background: #fef2f2; color: #991b1b; }
+  .user-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .user-actions form { display: inline; }
+  .btn-sm {
+    padding: 4px 10px; border-radius: 6px; font-size: 0.7rem;
+    border: 1px solid #ddd; cursor: pointer; background: #f8f9fc;
+    transition: background 0.2s;
+  }
+  .btn-sm:hover { background: #eef1fa; }
+  .btn-danger { color: #dc2626; border-color: #fecaca; }
+  .btn-danger:hover { background: #fef2f2; }
+
+  /*  Formulario Crear  */
+  .create-form {
+    background: #f8f9fc; border-radius: 10px; padding: 1.2rem;
+    border: 1px dashed #c8d0e5; margin-bottom: 1.5rem;
+  }
+  .create-form h3 {
+    font-family: var(--font-head); font-size: 0.85rem;
+    color: var(--navy); margin-bottom: 0.8rem;
+  }
+  .form-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.6rem; align-items: end;
+  }
+  .form-row label { font-size: 0.7rem; font-weight: 600; color: var(--navy); display: block; margin-bottom: 2px; }
+  .form-row input, .form-row select {
+    width: 100%; padding: 6px 8px; border: 1px solid #dde1ea; border-radius: 6px;
+    font-size: 0.8rem; font-family: 'Inter', sans-serif;
+  }
+  .btn-crear {
+    padding: 6px 16px; background: var(--navy); color: var(--gold);
+    border: none; border-radius: 6px; font-weight: 700; cursor: pointer;
+    font-size: 0.8rem; font-family: 'Syne', sans-serif;
+  }
+  .btn-crear:hover { background: #091d4f; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="font-family:var(--font-head); font-size:1.4rem; color:var(--navy); margin-bottom:0.3rem;">
+   Administración de Usuarios
+</h1>
+<p style="font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">
+  Gestiona accesos y roles del sistema. Solo los administradores pueden acceder aquí.
+</p>
+
+<!-- Formulario de Crear Usuario -->
+<div class="create-form">
+  <h3> Crear Nuevo Usuario</h3>
+  <form action="{{ url_for('auth.crear_usuario') }}" method="POST">
+    <div class="form-row">
+      <div>
+        <label>Usuario</label>
+        <input type="text" name="username" required placeholder="nombre.usuario" />
+      </div>
+      <div>
+        <label>Contraseña</label>
+        <input type="password" name="password" required placeholder="Min. 6 caracteres" />
+      </div>
+      <div>
+        <label>Nombre Completo</label>
+        <input type="text" name="nombre_completo" placeholder="Juan Pérez" />
+      </div>
+      <div>
+        <label>Rol</label>
+        <select name="rol">
+          <option value="bodega"> Bodega</option>
+          <option value="oficina"> Oficina</option>
+          <option value="admin"> Admin</option>
+        </select>
+      </div>
+      <div>
+        <button type="submit" class="btn-crear">Crear</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Lista de Usuarios -->
+<div class="users-grid">
+  {% for u in usuarios %}
+  <div class="user-card">
+    <div class="user-info">
+      <div class="user-name">{{ u.nombre_completo or u.username }}</div>
+      <div class="user-meta">
+        @{{ u.username }} ·
+        {% if u.rol == 'admin' %}
+          <span class="user-badge badge-admin"> Admin</span>
+        {% elif u.rol == 'oficina' %}
+          <span class="user-badge badge-oficina"> Oficina</span>
+        {% else %}
+          <span class="user-badge badge-bodega"> Bodega</span>
+        {% endif %}
+        {% if not u.activo %}
+          <span class="user-badge badge-inactivo"> Inactivo</span>
+        {% endif %}
+        · Creado: {{ u.creado_en[:10] if u.creado_en else '-' }}
+      </div>
+    </div>
+    <div class="user-actions">
+      <!-- Toggle activo/inactivo -->
+      <form action="{{ url_for('auth.toggle_usuario', user_id=u.id) }}" method="POST">
+        {% if u.activo %}
+          <button type="submit" class="btn-sm btn-danger" onclick="return confirm('¿Desactivar usuario?')">
+             Desactivar
+          </button>
+        {% else %}
+          <button type="submit" class="btn-sm"> Activar</button>
+        {% endif %}
+      </form>
+      <!-- Reset contraseña -->
+      <form action="{{ url_for('auth.reset_password', user_id=u.id) }}" method="POST"
+            onsubmit="var p=prompt('Nueva contraseña (min 6 chars):'); if(!p||p.length<6){alert('Min 6 caracteres');return false;} this.querySelector('[name=new_password]').value=p;">
+        <input type="hidden" name="new_password" />
+        <button type="submit" class="btn-sm"> Reset Pass</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,1047 @@
+{% extends "base.html" %}
+<!--
+  detalle.html — Vista completa de un pedido de traspaso
+  =======================================================
+  v5: Gestión de secciones (pasillos), digitación, recibido y anexos.
+  v9: Personal (tabla personal con nombre/apellido/cédula),
+      refresco automático al cargar desde DB,
+      personal_id guardado para estadísticas futuras.
+-->
+
+{% block title %}Pedido #{{ pedido.correlativo_mes if pedido.correlativo_mes else pedido.id }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/detalle.css') }}">
+{% endblock %}
+
+
+{% block content %}
+
+<!--  Breadcrumb  -->
+<div class="breadcrumb">
+  <a href="/registros"> Tablero</a>
+  <span>›</span>
+  {% if pedido.correlativo_mes %}
+  <span>Pedido #{{ pedido.correlativo_mes }} (Interno #{{ pedido.id }}) — {{ pedido.marca }}</span>
+  {% else %}
+  <span>Pedido #{{ pedido.id }} — {{ pedido.marca }}</span>
+  {% endif %}
+</div>
+
+<!--  Barra de información del pedido  -->
+<div class="info-bar">
+  <div>
+    {% if pedido.correlativo_mes %}
+    <span class="ib-id">#{{ pedido.correlativo_mes }}</span>
+    <div class="ib-marca" style="font-size:0.7em; color:#666;">ID Interno #{{ pedido.id }}</div>
+    {% else %}
+    <span class="ib-id">#{{ pedido.id }}</span>
+    {% endif %}
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="ib-marca" id="pedido-marca-texto">{{ pedido.marca }}</div>
+      <button onclick="editarMarca()"
+        style="background:transparent; border:none; cursor:pointer; font-size:.9rem; opacity:0.6;"
+        title="Editar Nombre"></button>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
+    {% if pedido.tipo == 'directo' %}
+    <span class="badge-tipo badge-directo"> Directo</span>
+    <form action="/pedido/{{ pedido.id }}/cambiar_tipo" method="POST" style="display:inline;"
+      onsubmit="return confirm('¿Cambiar este pedido a tipo EMPAQUE?')">
+      <button type="submit"
+        style="background:rgba(0,0,0,0.05); border:1px solid rgba(0,0,0,0.1); border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer; color:#666;"
+        title="Cambiar a Empaque"> Cambiar a Empaque</button>
+    </form>
+    {% if pedido.estado == 'pendiente' %}
+    <button class="btn btn-primary btn-sm" style="background:#15803d; border:none; margin-left:.5rem;"
+      onclick="abrirModalRetiro('{{ pedido.id }}', '{{ pedido.marca | e }}')">
+       Retirar
+    </button>
+    {% endif %}
+    {% else %}
+    <span class="badge-tipo badge-empaque"> Empaque</span>
+    <form action="/pedido/{{ pedido.id }}/cambiar_tipo" method="POST" style="display:inline;"
+      onsubmit="return confirm('¿Cambiar este pedido a tipo DIRECTO? Perderá su número de mes.')">
+      <button type="submit"
+        style="background:rgba(0,0,0,0.05); border:1px solid rgba(0,0,0,0.1); border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer; color:#666;"
+        title="Cambiar a Directo"> Cambiar a Directo</button>
+    </form>
+    {% endif %}
+
+    {% if pedido.estado == 'pendiente' %}
+    <span class="badge-estado badge-pendiente">🟡 Pendiente</span>
+    {% elif pedido.estado == 'empacando' %}
+    <span class="badge-estado badge-empacando"> Empacando</span>
+    <form action="/pedido/{{ pedido.id }}/reset_empaque" method="POST" style="display:inline;"
+      onsubmit="return confirm('¿Reiniciar estado a PENDIENTE y borrar tiempos de empaque?')">
+      <button type="submit" class="btn-text-alt"
+        style="margin-left:.4rem; font-size:.65rem; color:#dc2626; cursor:pointer; background:none; border:none; text-decoration:underline;">Reiniciar
+        Estado</button>
+    </form>
+    {% elif pedido.estado == 'empacado' %}
+    <span class="badge-estado badge-empacado">🟢 Empacado</span>
+    <form action="/pedido/{{ pedido.id }}/reset_empaque" method="POST" style="display:inline;"
+      onsubmit="return confirm('¿Reiniciar estado a PENDIENTE y borrar tiempos de empaque?')">
+      <button type="submit" class="btn-text-alt"
+        style="margin-left:.4rem; font-size:.65rem; color:#dc2626; cursor:pointer; background:none; border:none; text-decoration:underline;">Reiniciar
+        Estado</button>
+    </form>
+    {% elif pedido.estado == 'retirado' %}
+    <span class="badge-estado badge-retirado"> Retirado</span>
+    {% endif %}
+
+    <span class="badge">
+      {% if pedido.bultos %}
+      {{ pedido.bultos }} bultos
+      {% else %}
+      <span style="color:#854d0e;"> bultos pendiente</span>
+      {% endif %}
+    </span>
+    <span class="mono" style="font-size:.8rem;">{{ pedido.fecha | str_to_time }}</span>
+  </div>
+
+  <div style="margin-left:auto; display:flex; gap:.5rem; flex-wrap:wrap;">
+    <a href="/exportar/{{ pedido.id }}" class="btn btn-primary btn-sm"
+      style="width:auto; background:#16a34a; gap:.4rem;">
+       Exportar Excel
+    </a>
+    <a href="/registros" class="btn btn-secondary btn-sm">← Tablero</a>
+  </div>
+</div>
+
+<!-- 
+     SECCIÓN 1 — INFORMACIÓN DEL PEDIDO
+ -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="sec-header"> Información del Pedido</div>
+
+  <form action="/pedido/{{ pedido.id }}" method="POST">
+    <input type="hidden" name="tipo" value="{{ pedido.tipo }}" />
+    <div class="grid-2">
+
+      <!-- Columna izquierda: RECIBIDO -->
+      <div>
+        <p
+          style="font-family:var(--font-head); font-size:.8rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.75rem;">
+           Recibido
+        </p>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; margin-bottom:1rem;">
+          <div class="form-group" style="margin:0;">
+            <label>Fecha</label>
+            <input type="date" name="recibido_fecha" id="recibido_fecha"
+              value="{% if pedido.recibido_ano %}{{ '%04d-%02d-%02d' % (pedido.recibido_ano|int, pedido.recibido_mes|int, pedido.recibido_dia|int) }}{% endif %}" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Hora</label>
+            <input type="time" name="recibido_hora_picker" id="recibido_hora_picker"
+              value="{{ pedido.recibido_hora[:5] if pedido.recibido_hora else '' }}" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label> Hojas</label>
+          <input type="text" name="hojas" value="{{ pedido.hojas or '' }}" placeholder="Número de hojas..." />
+        </div>
+      </div>
+
+      <!-- Columna derecha: TIEMPOS DEL PEDIDO -->
+      <div>
+        <p
+          style="font-family:var(--font-head); font-size:.8rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.75rem;">
+          ⏱ Tiempos del Pedido (Tablero)
+        </p>
+        <div class="form-group">
+          <label>Comienzo</label>
+          <input type="datetime-local" name="inicio_empaque"
+            value="{{ pedido.inicio_empaque[:16].replace(' ','T') if pedido.inicio_empaque else '' }}" />
+        </div>
+        <div class="form-group">
+          <label>Termina</label>
+          <input type="datetime-local" name="fin_empaque"
+            value="{{ pedido.fin_empaque[:16].replace(' ','T') if pedido.fin_empaque else '' }}" />
+        </div>
+        <div class="form-group" style="margin-top:-0.3rem; margin-bottom:0.75rem;">
+          <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-weight:normal;">
+            <input type="checkbox" name="es_hora_extra" value="1" {% if pedido.es_hora_extra %}checked{% endif %}
+              style="width:16px; height:16px;" />
+            <span style="font-size:0.8rem; color:var(--text); padding-top:2px;">Contabilizar Extra () si aplica</span>
+          </label>
+          <label
+            style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-weight:normal; margin-top:0.4rem;">
+            <!-- NOTA DEVELOPER: Ambos checkboxes mapean su estado a booleanos en Base de Datos (0 o 1) -->
+            <input type="checkbox" name="sabado_reposicion" value="1" {% if pedido.sabado_reposicion %}checked{% endif
+              %} style="width:16px; height:16px;" />
+            <span style="font-size:0.8rem; color:var(--text); padding-top:2px;">Jornada Reposición Sábado
+              (8am-2pm)</span>
+          </label>
+        </div>
+        {% if pedido.tiempo_laboral and pedido.tiempo_laboral.minutos_totales > 0 %}
+        <div
+          style="font-size:.75rem; background:rgba(21,94,117,0.05); padding:.5rem; border-radius:6px; border:1px solid rgba(21,94,117,0.1);">
+          <div>⏱ Bruto: {{ pedido.tiempo_laboral.texto_total }}</div>
+          <div style="color:var(--navy); font-weight:600;"> Neto: {{ pedido.tiempo_laboral.texto_regulares }}</div>
+          <div style="font-size:0.65rem; color:var(--muted); margin-top:2px;">* No se cuenta la hora de almuerzo en la
+            duración.</div>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- Fila de bultos y Empacador -->
+    <div class="grid-2" style="margin-top:.5rem; margin-bottom:1rem; align-items:flex-end;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label> Cantidad de Bultos
+          {% if not pedido.bultos %}
+          <span style="color:#dc2626; font-weight:700; margin-left:.4rem;">← REQUERIDO para terminar empaque</span>
+          {% endif %}
+        </label>
+        <input type="number" name="bultos" min="1" step="1" placeholder="Ej: 12" value="{{ pedido.bultos or '' }}"
+          class="{% if not pedido.bultos %}border-danger{% endif %}" />
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label> Empacador (Dictado Por)</label>
+        <select name="empacador_id"
+          style="width:100%; padding:.75rem; border:1px solid var(--border); border-radius:8px;">
+          <option value="">-- Seleccionar Empacador (Bodega) --</option>
+          {% for p in pers_bodega %}
+          <option value="{{ p.id }}" {{ 'selected' if pedido.empacador_id==p.id }}>
+            {{ p.nombre }} {{ p.apellido }}
+          </option>
+          {% endfor %}
+        </select>
+        <p style="font-size:.65rem; color:var(--muted); margin-top:.2rem;">Determina el horario de almuerzo para el
+          tiempo total.</p>
+      </div>
+    </div>
+
+    <!-- Segunda fila: Digitado por y Observación -->
+    <div class="grid-2" style="margin-top:.5rem;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label> Digitado Por (Oficina) {% if pedido.tipo == 'empaque' %}<span style="color:#ef4444;">*</span>{% endif %}</label>
+        <input type="text" name="digitado_por" list="lista-personal-oficina" autocomplete="off"
+          value="{{ pedido.digitado_por or '' }}" placeholder="Persona de oficina..." {% if pedido.tipo == 'empaque' %}required{% endif %} />
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label> Observación</label>
+        <input type="text" name="observacion" value="{{ pedido.observacion or '' }}"
+          placeholder="Ej: A la espera de mercancía..." />
+      </div>
+    </div>
+
+    <!-- Datalist para retiro (catálogo Personas externas) -->
+    <datalist id="lista-personas">
+      {% for p in personas %}
+      <option value="{{ p['nombre'] }}">
+        {% endfor %}
+    </datalist>
+
+    <!-- Datalist para Oficina -->
+    <datalist id="lista-personal-oficina">
+      {% for p in pers_oficina %}
+      <option value="{{ p['nombre'] }} {{ p['apellido'] }}">
+        {% endfor %}
+    </datalist>
+
+    <!-- Datalist para Bodega (Pasillos) -->
+    <datalist id="lista-personal-bodega">
+      {% for p in pers_bodega %}
+      <option value="{{ p['nombre'] }} {{ p['apellido'] }}">
+        {% endfor %}
+    </datalist>
+
+    <div style="margin-top:1.2rem; display:flex; gap:.75rem; justify-content:flex-end;">
+      <button type="button" onclick="rellenarDigitacionAhora()" class="btn btn-secondary btn-sm">
+        ⏱ Marcar digitación ahora
+      </button>
+      <button type="submit" class="btn btn-primary btn-sm" style="width:auto;">
+         Guardar información
+      </button>
+    </div>
+  </form>
+</div>
+
+
+<!-- 
+     SECCIÓN 2 — SECCIONES / PASILLOS
+ -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="sec-header">
+     Secciones / Pasillos
+    <span class="pill">Pedido principal</span>
+  </div>
+  <p style="font-size:.8rem; color:var(--muted); margin-bottom:1rem;">
+    Registra el inicio y fin de cada sección (pasillo).
+    Sección 5 = Segundo Piso. El personal asignado queda vinculado para estadísticas futuras.
+  </p>
+
+  <!--  Modo Preparación Global (Operador Único)  -->
+  {% if pedido.preparador_nombre %}
+  <div class="card global-prep-card" style="margin-bottom:1.5rem; background:linear-gradient(to right, #f8fafc, #eff6ff); border:1px solid #93c5fd;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+      <div>
+        <h4 style="margin:0; color:var(--navy); font-family:var(--font-head); font-weight:800;"> Preparación Global Activa</h4>
+        <p style="font-size:.82rem; color:var(--muted); margin:.2rem 0 0 0;">Una sola persona está gestionando todo el pedido.</p>
+      </div>
+      <button type="button" onclick="eliminarPreparacionGlobal()" class="btn-text-alt" style="color:#dc2626; font-size:.75rem;"> Eliminar preparación global</button>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1rem; align-items:center;">
+       <div class="prep-stat">
+          <label style="display:block; font-size:.65rem; font-weight:700; color:var(--navy); text-transform:uppercase;">Asignado a:</label>
+          <div style="display:flex; align-items:center; gap:.4rem; font-weight:700; color:#1d4ed8;">
+             {{ pedido.preparador_nombre }}
+          </div>
+       </div>
+
+       <div class="prep-time">
+          <label style="display:block; font-size:.65rem; font-weight:700; color:var(--navy); text-transform:uppercase;">Inicio:</label>
+          <div style="font-family:var(--font-mono); font-size:.85rem;">
+             {{ pedido.inicio_preparacion | str_to_time if pedido.inicio_preparacion else '—' }}
+          </div>
+       </div>
+
+       <div class="prep-time">
+          <label style="display:block; font-size:.65rem; font-weight:700; color:var(--navy); text-transform:uppercase;">Fin:</label>
+          <div style="font-family:var(--font-mono); font-size:.85rem;">
+            ⏹ {{ pedido.fin_preparacion | str_to_time if pedido.fin_preparacion else '—' }}
+          </div>
+       </div>
+    </div>
+
+    {% if pedido.tiempo_preparacion and pedido.tiempo_preparacion.minutos_totales > 0 %}
+    <div style="margin-top:1rem; padding-top:.75rem; border-top:1px dashed rgba(13,42,110,0.1); font-size:0.75rem;">
+       ⏱ Duración Total Preparación: <strong>{{ pedido.tiempo_preparacion.texto_regulares }}</strong>
+    </div>
+    {% elif pedido.inicio_preparacion and pedido.fin_preparacion %}
+    <div style="margin-top:1rem; padding-top:.75rem; border-top:1px dashed rgba(220,38,38,0.1); font-size:0.75rem; color:#dc2626;">
+        La hora de fin es anterior o igual al inicio. Revisa si es AM/PM.
+    </div>
+    {% endif %}
+
+    <div style="margin-top:1.2rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+       {% if not pedido.inicio_preparacion %}
+       <button onclick="actualizarPrepGlobal('inicio', 'now')" class="btn btn-primary btn-sm"> Empezar Ahora</button>
+       {% endif %}
+       {% if pedido.inicio_preparacion and not pedido.fin_preparacion %}
+       <button onclick="actualizarPrepGlobal('fin', 'now')" class="btn btn-primary btn-sm" style="background:#16a34a;">⏹ Finalizar Ahora</button>
+       {% endif %}
+
+       <button type="button" class="btn-text-alt" onclick="toggleManual('global-manual-edit')" style="font-size:.75rem;"> Editar Manual</button>
+    </div>
+
+    <!-- Sección de edición manual oculta -->
+    <div id="global-manual-edit" style="display:none; margin-top:1rem; padding-top:1rem; border-top:1px dashed rgba(13,42,110,0.2);">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        <div>
+          <label style="display:block; font-size:.65rem; font-weight:700; color:var(--navy); text-transform:uppercase; margin-bottom:.3rem;"> Inicio Manual:</label>
+          <input type="datetime-local" id="global-ini-manual" value="{{ pedido.inicio_preparacion[:16].replace(' ','T') if pedido.inicio_preparacion else '' }}" style="font-size:.8rem; padding:.4rem; width:100%; border-radius:4px; border:1px solid #cbd5e1;">
+          <button onclick="actualizarPrepGlobal('inicio', document.getElementById('global-ini-manual').value)" class="btn btn-primary btn-sm" style="width:100%; margin-top:.4rem; font-size:.7rem;">Guardar Inicio</button>
+        </div>
+        <div>
+          <label style="display:block; font-size:.65rem; font-weight:700; color:var(--navy); text-transform:uppercase; margin-bottom:.3rem;">⏹ Fin Manual:</label>
+          <input type="datetime-local" id="global-fin-manual" value="{{ pedido.fin_preparacion[:16].replace(' ','T') if pedido.fin_preparacion else '' }}" style="font-size:.8rem; padding:.4rem; width:100%; border-radius:4px; border:1px solid #cbd5e1;">
+          <button onclick="actualizarPrepGlobal('fin', document.getElementById('global-fin-manual').value)" class="btn btn-primary btn-sm" style="width:100%; margin-top:.4rem; font-size:.7rem; background:#16a34a;">Guardar Fin</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+    <!-- Banner de Reclamo Rápido (Solo si no hay secciones empezadas) -->
+    {% set ns = namespace(started=false) %}
+    {% for sec_n in range(1, 6) %}
+        {% for p in pedido.secciones.get(sec_n, []) %}
+            {% if p.inicio %}{% set ns.started = true %}{% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    {% if not ns.started and pedido.estado != 'retirado' %}
+    <div class="banner-operador-unico" id="banner-operador">
+        <div class="banner-content">
+        <div class="banner-icon"></div>
+        <div class="banner-text">
+            <h4>¿Modo Global? (Todo el pedido)</h4>
+            <p>Si una sola persona hará <strong>todo el pedido completo</strong>, usa esta opción:</p>
+        </div>
+        <div class="banner-form">
+            <input type="text" id="operador-nombre" list="lista-personal-bodega" placeholder="Nombre completo..." autocomplete="off">
+            <button type="button" onclick="reclamarPedidoGlobal()" class="btn-banner"> Activar Global</button>
+        </div>
+        </div>
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <!--  Selector de Modo de Preparación (Pasillos vs Hojas)  -->
+  {% if not pedido.preparador_nombre %}
+  <div style="display:flex; justify-content:center; gap:1rem; margin-bottom:1.5rem;">
+    <button onclick="cambiarModoPrep('SECCIONES')" 
+            class="btn {{ 'btn-primary' if pedido.modo_preparacion != 'HOJAS' else 'btn-secondary' }}" 
+            style="padding: 0.5rem 1.2rem; border-radius: 8px;">
+         Por Pasillos
+    </button>
+    <button onclick="cambiarModoPrep('HOJAS')" 
+            class="btn {{ 'btn-primary' if pedido.modo_preparacion == 'HOJAS' else 'btn-secondary' }}" 
+            style="padding: 0.5rem 1.2rem; border-radius: 8px;"
+            {% if not pedido.max_hoja_calc or pedido.max_hoja_calc < 1 %}disabled title="Registra un número en 'Hojas' primero"{% endif %}>
+         Por Hojas {% if pedido.max_hoja_calc %}({{ pedido.max_hoja_calc }}){% endif %}
+    </button>
+  </div>
+  {% endif %}
+
+  <!--  Secciones Individuales (Solo si NO hay preparación global)  -->
+  <div id="secciones-manuales" {% if pedido.preparador_nombre %}style="opacity:0.5; pointer-events:none; filter: grayscale(1); display:none;"{% endif %}>
+    
+    {% if pedido.modo_preparacion != 'HOJAS' %}
+    <!--  VISTA: POR PASILLOS  -->
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; padding:0 .5rem;">
+        <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-size:.85rem; font-weight:700; color:var(--navy);">
+          <input type="checkbox" id="check-all-secciones" onchange="seleccionarTodasSecciones(this.checked)" style="width:18px; height:18px; accent-color:var(--navy);">
+          Seleccionar Todos los Pasillos
+        </label>
+        <div style="font-size:.75rem; color:var(--muted); font-style:italic;">* Usa el reclamo masivo para ahorrar tiempo</div>
+    </div>
+
+  {% set NOMBRES_SEC = ['Pasillo 1','Pasillo 2','Pasillo 3','Pasillo 4','2do Piso'] %}
+
+  <div class="secciones-grid" id="secciones-grid">
+    {% for sec_n in range(1, 6) %}
+    <div class="seccion-group" id="group-{{ sec_n }}" style="display:contents;">
+      {% set parts = pedido.secciones.get(sec_n, []) %}
+
+      {# Si no hay partes, mostramos una vacía por defecto para que puedan empezar #}
+      {% if not parts %}
+      {% set parts = [{'seccion_num': sec_n, 'id': None}] %}
+      {% endif %}
+
+      {% for sec in parts %}
+      {% set record_id = sec.id %}
+      {% set tiene_inicio = sec.get('inicio') %}
+      {% set tiene_fin = sec.get('fin') %}
+      {% set persona_sec = sec.get('persona') %}
+      {% set clase = 'tiene-todo' if (tiene_inicio and tiene_fin) else ('tiene-inicio' if tiene_inicio else '') %}
+
+      <div class="seccion-card {{ clase }}" id="sec-card-{{ record_id or 'new-' ~ sec_n }}" data-sec="{{ sec_n }}"
+        data-record="{{ record_id }}" style="position:relative; transition: all 0.3s ease;">
+        <div style="position:absolute; top:.5rem; left:.5rem;">
+           <input type="checkbox" class="seccion-checkbox" value="{{ record_id or 'new-' ~ sec_n }}" 
+                  data-sec="{{ sec_n }}" data-record="{{ record_id or '' }}"
+                  onchange="actualizarBarraSecciones()" style="width:18px; height:18px; cursor:pointer; accent-color:var(--navy);">
+        </div>
+        <div class="sec-num" style="margin-top:0.4rem;">{{ sec_n }}{% if loop.length > 1 %}<small style="opacity:.6; font-size:.6rem;">.{{
+            loop.index }}</small>{% endif %}</div>
+        <div class="sec-name">{{ NOMBRES_SEC[sec_n - 1] }}</div>
+
+        <div style="position:absolute; top:.5rem; right:.5rem; display:flex; gap:.3rem;">
+          {# Botón Dividir #}
+          <button type="button" class="btn-icon" title="Dividir esta sección"
+            onclick="dividirSeccion({{ pedido.id }}, {{ sec_n }})"
+            style="background:rgba(21,94,117,0.1); border:none; color:var(--navy); padding:.2rem; border-radius:4px; font-size:.8rem; cursor:pointer;">
+            
+          </button>
+          {# Botón Elminar parte (solo si hay más de una) #}
+          {% if loop.length > 1 %}
+          <button type="button" class="btn-icon" title="Eliminar esta parte"
+            onclick="limpiarSeccion({{ pedido.id }}, {{ sec_n }}, {{ record_id }})"
+            style="background:rgba(220,38,38,0.1); border:none; color:#dc2626; padding:.2rem; border-radius:4px; font-size:.8rem; cursor:pointer;">
+            
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Tiempos actuales -->
+        <span class="sec-time {{ 'inicio' if tiene_inicio else 'empty' }}"
+          id="sec-ini-{{ record_id or 'new-' ~ sec_n }}">
+           {{ tiene_inicio | str_to_time if tiene_inicio else '—' }}
+        </span>
+        <span class="sec-time {{ 'fin' if tiene_fin else 'empty' }}" id="sec-fin-{{ record_id or 'new-' ~ sec_n }}">
+          ⏹ {{ tiene_fin | str_to_time if tiene_fin else '—' }}
+        </span>
+
+        {% if sec.tiempo_laboral and sec.tiempo_laboral.minutos_totales > 0 %}
+        <div
+          style="font-size:.62rem; color:var(--navy); background:rgba(21,94,117,0.08); padding:.15rem .45rem; border-radius:10px; display:inline-block; margin-top:.2rem; border:1px solid rgba(21,94,117,0.1);">
+          <strong>Neto:</strong> {{ sec.tiempo_laboral.texto_regulares }}
+        </div>
+        {% endif %}
+
+        <div id="sec-persona-badge-{{ record_id or 'new-' ~ sec_n }}" class="persona-badge" {% if persona_sec %}
+          style="margin:.3rem 0; font-size:.68rem; font-weight:600; border-radius:4px; padding:.15rem .3rem; color:#1d4ed8; background:#eff6ff;"
+          {% else %}
+          style="margin:.3rem 0; font-size:.68rem; font-weight:600; border-radius:4px; padding:.15rem .3rem; color:var(--muted); background:var(--surface2);"
+          {% endif %}>
+           <span id="sec-persona-txt-{{ record_id or 'new-' ~ sec_n }}">{{ persona_sec or 'Sin asignar' }}</span>
+        </div>
+
+        <input type="text" id="sec-persona-input-{{ record_id or 'new-' ~ sec_n }}" list="lista-personal-bodega"
+          autocomplete="off" value="{{ persona_sec or '' }}" placeholder="Personal..." style="font-size:.68rem; padding:.22rem .4rem; width:100%; border:1.5px solid var(--border);
+                        border-radius:5px; margin:.25rem 0; background:var(--surface);"
+          onchange="actualizarPersona('{{ record_id or 'new-' ~ sec_n }}', {{ sec_n }})" />
+
+        <div class="sec-actions">
+          <button type="button" class="btn-sec btn-sec-ini" id="btn-ini-{{ record_id or 'new-' ~ sec_n }}"
+            onclick="seccionAhora({{ pedido.id }}, {{ sec_n }}, 'inicio', '{{ record_id }}')" {% if tiene_inicio %}
+            style="display:none;" {% endif %}>
+             Inicio ahora
+          </button>
+          <button type="button" class="btn-sec btn-sec-fin" id="btn-fin-{{ record_id or 'new-' ~ sec_n }}"
+            onclick="seccionAhora({{ pedido.id }}, {{ sec_n }}, 'fin', '{{ record_id }}')" {% if not tiene_inicio or
+            tiene_fin %} style="display:none;" {% endif %}>
+            ⏹ Fin ahora
+          </button>
+          <button type="button" class="btn-sec btn-sec-del"
+            onclick="toggleManual('sec-manual-{{ record_id or 'new-' ~ sec_n }}')">
+             Manual
+          </button>
+          <button type="button" class="btn-sec btn-sec-del" id="btn-limpiar-{{ record_id or 'new-' ~ sec_n }}"
+            onclick="limpiarSeccion({{ pedido.id }}, {{ sec_n }}, '{{ record_id }}')" {% if not (tiene_inicio or
+            tiene_fin) %} style="display:none;" {% endif %}>
+            ↺ Limpiar
+          </button>
+        </div>
+
+        <div id="sec-manual-{{ record_id or 'new-' ~ sec_n }}" style="display:none; margin-top:.6rem; text-align:left;">
+          <label
+            style="font-size:.6rem; font-weight:700; color:#1d4ed8; display:block; margin-bottom:.2rem; text-transform:uppercase;">
+            Inicio manual</label>
+          <input type="datetime-local" id="sec-manual-ini-{{ record_id or 'new-' ~ sec_n }}"
+            value="{{ tiene_inicio[:16].replace(' ','T') if tiene_inicio else '' }}" style="font-size:.68rem; padding:.25rem .4rem; width:100%; margin-bottom:.25rem;
+                          border:1.5px solid var(--border); border-radius:5px;" />
+          <button type="button" class="btn-sec btn-sec-ini" style="margin-bottom:.5rem;"
+            onclick="seccionManual({{ pedido.id }}, {{ sec_n }}, 'inicio', '{{ record_id }}')">Guardar inicio</button>
+
+          <label
+            style="font-size:.6rem; font-weight:700; color:#16a34a; display:block; margin-bottom:.2rem; text-transform:uppercase;">⏹
+            Fin manual</label>
+          <input type="datetime-local" id="sec-manual-fin-{{ record_id or 'new-' ~ sec_n }}"
+            value="{{ tiene_fin[:16].replace(' ','T') if tiene_fin else '' }}" style="font-size:.68rem; padding:.25rem .4rem; width:100%; margin-bottom:.25rem;
+                          border:1.5px solid var(--border); border-radius:5px;" />
+          <button type="button" class="btn-sec btn-sec-fin"
+            onclick="seccionManual({{ pedido.id }}, {{ sec_n }}, 'fin', '{{ record_id }}')">Guardar fin</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% elif pedido.modo_preparacion == 'HOJAS' %}
+  <!--  VISTA: POR HOJAS  -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; padding:0 .5rem;">
+    <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-size:.85rem; font-weight:700; color:var(--navy);">
+      <input type="checkbox" id="check-all-hojas" onchange="seleccionarTodasHojas(this.checked)" style="width:18px; height:18px; accent-color:var(--navy);">
+      Seleccionar Todas las Hojas
+    </label>
+    <div style="font-size:.75rem; color:var(--muted); font-style:italic;">* Usa el reclamo masivo para ahorrar tiempo</div>
+  </div>
+
+  <div class="secciones-grid" id="hojas-grid">
+    {% for hoja_n in range(1, (pedido.max_hoja_calc or 1) + 1) %}
+    <div class="seccion-group" id="hoja-group-{{ hoja_n }}" style="display:contents;">
+      {% set parts = pedido.hoja_records.get(hoja_n, []) %}
+
+      {# Si no hay partes inventamos una virtual #}
+      {% if not parts %}
+      {% set parts = [{'hoja_num': hoja_n, 'id': None}] %}
+      {% endif %}
+
+      {% for sec in parts %}
+      {% set record_id = sec.id %}
+      {% set tiene_inicio = sec.get('inicio') %}
+      {% set tiene_fin = sec.get('fin') %}
+      {% set persona_sec = sec.get('persona') %}
+      {% set clase = 'tiene-todo' if (tiene_inicio and tiene_fin) else ('tiene-inicio' if tiene_inicio else '') %}
+
+      <div class="seccion-card {{ clase }}" id="hoja-card-{{ record_id or 'new-' ~ hoja_n }}" style="position:relative; transition: all 0.3s ease;">
+        <div style="position:absolute; top:.5rem; left:.5rem;">
+           <input type="checkbox" class="hoja-checkbox" value="{{ record_id or 'new-' ~ hoja_n }}" 
+                  data-hoja="{{ hoja_n }}" data-record="{{ record_id or '' }}"
+                  onchange="actualizarBarraHojas()" style="width:18px; height:18px; cursor:pointer; accent-color:var(--navy);">
+        </div>
+        
+        <div class="sec-num" style="background:#0d2a6e; color:#fff; padding:0.2rem 0.5rem; border-radius:4px; font-size:1.1rem; display:inline-block; margin-bottom:0.5rem; margin-top:0.4rem;">
+            Hoja {{ hoja_n }}{% if loop.length > 1 %}<small style="opacity:.8; font-size:.7rem;">.{{ loop.index }}</small>{% endif %}
+        </div>
+
+        <div style="position:absolute; top:.5rem; right:.5rem; display:flex; gap:.3rem;">
+          <button type="button" class="btn-icon" title="Dividir hoja" onclick="dividirHoja({{ pedido.id }}, {{ hoja_n }})"
+            style="background:rgba(21,94,117,0.1); border:none; color:var(--navy); padding:.2rem; border-radius:4px; font-size:.8rem; cursor:pointer;">
+            
+          </button>
+          {% if loop.length > 1 %}
+          <button type="button" class="btn-icon" title="Eliminar fragmento" onclick="limpiarHoja({{ pedido.id }}, {{ hoja_n }}, {{ record_id }})"
+            style="background:rgba(220,38,38,0.1); border:none; color:#dc2626; padding:.2rem; border-radius:4px; font-size:.8rem; cursor:pointer;">
+            
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Tiempos actuales -->
+        <span class="sec-time {{ 'inicio' if tiene_inicio else 'empty' }}" id="hoja-ini-{{ record_id or 'new-' ~ hoja_n }}">
+           {{ tiene_inicio | str_to_time if tiene_inicio else '—' }}
+        </span>
+        <span class="sec-time {{ 'fin' if tiene_fin else 'empty' }}" id="hoja-fin-{{ record_id or 'new-' ~ hoja_n }}">
+          ⏹ {{ tiene_fin | str_to_time if tiene_fin else '—' }}
+        </span>
+
+        {% if sec.tiempo_laboral and sec.tiempo_laboral.minutos_totales > 0 %}
+        <div style="font-size:.62rem; color:var(--navy); background:rgba(21,94,117,0.08); padding:.15rem .45rem; border-radius:10px; display:inline-block; margin-top:.2rem; border:1px solid rgba(21,94,117,0.1);">
+          <strong>Neto:</strong> {{ sec.tiempo_laboral.texto_regulares }}
+        </div>
+        {% endif %}
+
+        <div id="hoja-persona-badge-{{ record_id or 'new-' ~ hoja_n }}" class="persona-badge" {% if persona_sec %}
+          style="margin:.3rem 0; font-size:.68rem; font-weight:600; border-radius:4px; padding:.15rem .3rem; color:#1d4ed8; background:#eff6ff;"
+          {% else %}
+          style="margin:.3rem 0; font-size:.68rem; font-weight:600; border-radius:4px; padding:.15rem .3rem; color:var(--muted); background:var(--surface2);"
+          {% endif %}>
+           <span id="hoja-persona-txt-{{ record_id or 'new-' ~ hoja_n }}">{{ persona_sec or 'Sin asignar' }}</span>
+        </div>
+
+        <input type="text" id="hoja-persona-input-{{ record_id or 'new-' ~ hoja_n }}" list="lista-personal-bodega"
+          autocomplete="off" value="{{ persona_sec or '' }}" placeholder="Personal..." 
+          style="font-size:.68rem; padding:.22rem .4rem; width:100%; border:1.5px solid var(--border); border-radius:5px; margin:.25rem 0; background:var(--surface);"
+          onchange="actualizarPersonaHoja('{{ record_id or 'new-' ~ hoja_n }}', {{ hoja_n }})" />
+
+        <div class="sec-actions">
+          <button type="button" class="btn-sec btn-sec-ini" id="btn-hoja-ini-{{ record_id or 'new-' ~ hoja_n }}"
+            onclick="hojaAhora({{ pedido.id }}, {{ hoja_n }}, 'inicio', '{{ record_id }}')" {% if tiene_inicio %}style="display:none;"{% endif %}>
+             Inicio ahora
+          </button>
+          <button type="button" class="btn-sec btn-sec-fin" id="btn-hoja-fin-{{ record_id or 'new-' ~ hoja_n }}"
+            onclick="hojaAhora({{ pedido.id }}, {{ hoja_n }}, 'fin', '{{ record_id }}')" {% if not tiene_inicio or tiene_fin %}style="display:none;"{% endif %}>
+            ⏹ Fin ahora
+          </button>
+          <button type="button" class="btn-sec btn-sec-del" onclick="toggleManual('hoja-manual-{{ record_id or 'new-' ~ hoja_n }}')">
+             Manual
+          </button>
+          <button type="button" class="btn-sec btn-sec-del" id="btn-hoja-limpiar-{{ record_id or 'new-' ~ hoja_n }}"
+            onclick="limpiarHoja({{ pedido.id }}, {{ hoja_n }}, '{{ record_id }}')" {% if not (tiene_inicio or tiene_fin) %}style="display:none;"{% endif %}>
+            ↺ Limpiar
+          </button>
+        </div>
+
+        <div id="hoja-manual-{{ record_id or 'new-' ~ hoja_n }}" style="display:none; margin-top:.6rem; text-align:left;">
+          <label style="font-size:.6rem; font-weight:700; color:#1d4ed8; display:block; margin-bottom:.2rem; text-transform:uppercase;"> Inicio manual</label>
+          <input type="datetime-local" id="hoja-manual-ini-{{ record_id or 'new-' ~ hoja_n }}"
+            value="{{ tiene_inicio[:16].replace(' ','T') if tiene_inicio else '' }}" style="font-size:.68rem; padding:.25rem .4rem; width:100%; margin-bottom:.25rem; border:1.5px solid var(--border); border-radius:5px;" />
+          <button type="button" class="btn-sec btn-sec-ini" style="margin-bottom:.5rem;"
+            onclick="hojaManual({{ pedido.id }}, {{ hoja_n }}, 'inicio', '{{ record_id }}')">Guardar inicio</button>
+
+          <label style="font-size:.6rem; font-weight:700; color:#16a34a; display:block; margin-bottom:.2rem; text-transform:uppercase;">⏹ Fin manual</label>
+          <input type="datetime-local" id="hoja-manual-fin-{{ record_id or 'new-' ~ hoja_n }}"
+            value="{{ tiene_fin[:16].replace(' ','T') if tiene_fin else '' }}" style="font-size:.68rem; padding:.25rem .4rem; width:100%; margin-bottom:.25rem; border:1.5px solid var(--border); border-radius:5px;" />
+          <button type="button" class="btn-sec btn-sec-fin"
+            onclick="hojaManual({{ pedido.id }}, {{ hoja_n }}, 'fin', '{{ record_id }}')">Guardar fin</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% endif %}
+</div>
+
+
+<!-- 
+     SECCIÓN 3 — ANEXOS
+ -->
+<div style="margin-bottom:1.5rem;">
+  <div class="sec-header" style="margin-bottom:1rem;">
+     Anexos
+    <span class="pill">{{ pedido.anexos | length }}</span>
+  </div>
+
+  <!-- Lista de anexos existentes -->
+  {% for anx in pedido.anexos %}
+  <div class="anexo-card">
+    <div class="anexo-header">
+      <h3>Anexo {{ loop.index }} — {{ anx.cantidad_bultos }} bultos</h3>
+      <div style="display:flex; gap:.5rem;">
+        <button type="button" data-target="anx-{{ anx.id }}" onclick="toggleAnexo(this.dataset.target)"
+          style="background:rgba(255,255,255,.15); border:none; color:#fff; border-radius:4px; padding:.25rem .7rem; font-size:.75rem; cursor:pointer;">
+           Editar
+        </button>
+        <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/eliminar" method="POST"
+          onsubmit="return confirm('¿Eliminar este anexo?')">
+          <button type="submit"
+            style="background:rgba(220,38,38,.25); border:1px solid rgba(220,38,38,.5); color:#fca5a5; border-radius:4px; padding:.25rem .7rem; font-size:.75rem; cursor:pointer;">
+            
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="anexo-body">
+      <div
+        style="display:flex; gap:1.5rem; flex-wrap:wrap; font-size:.82rem; color:var(--muted); margin-bottom:.75rem;">
+        {% if anx.digitado_por %}<span> Digitado: <strong>{{ anx.digitado_por }}</strong></span>{% endif %}
+        {% if anx.recibido_mes %}<span> Recibido: {{ anx.recibido_mes }}/{{ anx.recibido_dia }}/{{ anx.recibido_ano
+          }}</span>{% endif %}
+      </div>
+
+      <!-- Secciones del anexo -->
+      <div class="secciones-grid" style="margin-bottom:1rem;">
+        {% for sec_n in range(1, 6) %}
+        {% set sec = anx.secciones.get(sec_n, {}) %}
+        {% set ti = sec.get('inicio') %}
+        {% set tf = sec.get('fin') %}
+        {% set clase = 'tiene-todo' if (ti and tf) else ('tiene-inicio' if ti else '') %}
+        <div class="seccion-card {{ clase }}" style="background:var(--surface);">
+          <div class="sec-num" style="font-size:1.1rem;">{{ sec_n }}</div>
+          <span class="sec-time {{ 'inicio' if ti else 'empty' }}"> {{ ti | str_to_time if ti else '—' }}</span>
+          <span class="sec-time {{ 'fin'    if tf else 'empty' }}">⏹ {{ tf | str_to_time if tf else '—' }}</span>
+
+          <!-- v13: Tiempo neto para anexo -->
+          {% if sec.tiempo_laboral and sec.tiempo_laboral.minutos_totales > 0 %}
+          <div style="font-size:.58rem; color:var(--navy); margin-top:.15rem;">
+            Neto: {{ sec.tiempo_laboral.texto_regulares }}
+          </div>
+          {% endif %}
+          <div class="sec-actions">
+            {% if not ti %}
+            <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/seccion/{{ sec_n }}" method="POST">
+              <input type="hidden" name="tipo_campo" value="inicio" />
+              <input type="hidden" name="valor" value="now" />
+              <button type="submit" class="btn-sec btn-sec-ini" style="font-size:.65rem;"> Ahora</button>
+            </form>
+            {% else %}
+            {% if not tf %}
+            <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/seccion/{{ sec_n }}" method="POST">
+              <input type="hidden" name="tipo_campo" value="fin" />
+              <input type="hidden" name="valor" value="now" />
+              <button type="submit" class="btn-sec btn-sec-fin" style="font-size:.65rem;">⏹ Ahora</button>
+            </form>
+            {% endif %}
+            {% endif %}
+            <button type="button" class="btn-sec btn-sec-del" style="font-size:.65rem;"
+              data-target="anx-sec-{{ anx.id }}-{{ sec_n }}" onclick="toggleManual(this.dataset.target)">
+              Manual</button>
+          </div>
+          <!-- Manual de sección de anexo -->
+          <div id="anx-sec-{{ anx.id }}-{{ sec_n }}" style="display:none; margin-top:.4rem; text-align:left;">
+            <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/seccion/{{ sec_n }}" method="POST">
+              <label
+                style="font-size:.6rem; font-weight:700; color:var(--navy); text-transform:uppercase;">Inicio</label>
+              <input type="datetime-local" name="valor" value="{{ ti[:16].replace(' ','T') if ti else '' }}"
+                style="font-size:.68rem; padding:.25rem .4rem; margin-bottom:.25rem;" />
+              <input type="hidden" name="tipo_campo" value="inicio" />
+              <button type="submit" class="btn-sec btn-sec-ini"
+                style="font-size:.65rem; margin-bottom:.3rem;">Inicio</button>
+            </form>
+            <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/seccion/{{ sec_n }}" method="POST">
+              <label style="font-size:.6rem; font-weight:700; color:var(--navy); text-transform:uppercase;">Fin</label>
+              <input type="datetime-local" name="valor" value="{{ tf[:16].replace(' ','T') if tf else '' }}"
+                style="font-size:.68rem; padding:.25rem .4rem; margin-bottom:.25rem;" />
+              <input type="hidden" name="tipo_campo" value="fin" />
+              <button type="submit" class="btn-sec btn-sec-fin" style="font-size:.65rem;">Fin</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Formulario edición del anexo (oculto) -->
+      <div id="anx-{{ anx.id }}" style="display:none; border-top:1px solid #93c5fd; padding-top:.9rem;">
+        <form action="/pedido/{{ pedido.id }}/anexo/{{ anx.id }}/editar" method="POST">
+          <div class="grid-2">
+            <div>
+              <div class="form-group">
+                <label>Bultos del Anexo</label>
+                <input type="number" name="cantidad_bultos" min="0" value="{{ anx.cantidad_bultos }}" required />
+              </div>
+              <div class="form-group">
+                <label>Hojas</label>
+                <input type="text" name="hojas" value="{{ anx.hojas or '' }}" placeholder="N° hojas..." />
+              </div>
+              <div class="form-group">
+                <label>Observación</label>
+                <input type="text" name="observacion" value="{{ anx.observacion or '' }}" placeholder="Opcional..." />
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:.4rem;">
+                <div class="form-group" style="margin:0;">
+                  <label>Mes</label>
+                  <input type="text" name="recibido_mes" value="{{ anx.recibido_mes or '' }}" placeholder="01"
+                    maxlength="2" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>Día</label>
+                  <input type="text" name="recibido_dia" value="{{ anx.recibido_dia or '' }}" placeholder="15"
+                    maxlength="2" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>Año</label>
+                  <input type="text" name="recibido_ano" value="{{ anx.recibido_ano or '' }}" placeholder="2026"
+                    maxlength="4" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label>Hora</label>
+                  <input type="text" name="recibido_hora" value="{{ anx.recibido_hora or '' }}" placeholder="08:00"
+                    maxlength="5" />
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="form-group">
+                <label>Digitado Por</label>
+                <input type="text" name="digitado_por" list="lista-personal-oficina" autocomplete="off"
+                  value="{{ anx.digitado_por or '' }}" placeholder="Persona..." />
+              </div>
+              <div class="form-group">
+                <label>Digitación Comienzo</label>
+                <input type="datetime-local" name="digitacion_inicio"
+                  value="{{ anx.digitacion_inicio[:16].replace(' ','T') if anx.digitacion_inicio else '' }}" />
+              </div>
+              <div class="form-group">
+                <label>Digitación Termina</label>
+                <input type="datetime-local" name="digitacion_fin"
+                  value="{{ anx.digitacion_fin[:16].replace(' ','T') if anx.digitacion_fin else '' }}" />
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:auto;"> Actualizar Anexo</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Botón / Formulario para agregar nuevo anexo -->
+  <div class="card" style="border: 1.5px dashed var(--border); background: var(--surface2);">
+    <div class="sec-header" style="font-size:.88rem; cursor:pointer;" onclick="toggleAnexo('form-nuevo-anexo')">
+       Agregar Nuevo Anexo
+      <span style="font-size:.7rem; color:var(--muted); font-weight:400;">(click para expandir)</span>
+    </div>
+
+    <div id="form-nuevo-anexo" style="display:none;">
+      <form action="/pedido/{{ pedido.id }}/anexo" method="POST">
+        <div class="grid-2">
+          <div>
+            <div class="form-group">
+              <label>Bultos del Anexo *</label>
+              <input type="number" name="cantidad_bultos" min="0" value="0" required />
+            </div>
+            <div class="form-group">
+              <label>Hojas</label>
+              <input type="text" name="hojas" placeholder="N° hojas..." />
+            </div>
+            <div class="form-group">
+              <label>Observación</label>
+              <input type="text" name="observacion" placeholder="Opcional..." />
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:.4rem;">
+              <div class="form-group" style="margin:0;"><label>Mes</label><input type="text" name="recibido_mes"
+                  placeholder="01" maxlength="2" /></div>
+              <div class="form-group" style="margin:0;"><label>Día</label><input type="text" name="recibido_dia"
+                  placeholder="15" maxlength="2" /></div>
+              <div class="form-group" style="margin:0;"><label>Año</label><input type="text" name="recibido_ano"
+                  placeholder="2026" maxlength="4" /></div>
+              <div class="form-group" style="margin:0;"><label>Hora</label><input type="text" name="recibido_hora"
+                  placeholder="08:00" maxlength="5" /></div>
+            </div>
+          </div>
+          <div>
+            <div class="form-group">
+              <label>Digitado Por</label>
+              <input type="text" name="digitado_por" list="lista-personal-oficina" autocomplete="off"
+                placeholder="Persona..." />
+            </div>
+            <div class="form-group">
+              <label>Digitación Comienzo</label>
+              <input type="datetime-local" name="digitacion_inicio" />
+            </div>
+            <div class="form-group">
+              <label>Digitación Termina</label>
+              <input type="datetime-local" name="digitacion_fin" />
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" style="width:auto; background:#1d4ed8;">
+           Crear Anexo
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- 
+     TOTAL FINAL
+ -->
+<div class="total-final">
+  <div>
+    <div class="tf-label">Total Cantidad Bultos Final</div>
+    <div style="font-size:.82rem; color:rgba(255,255,255,.55); margin-top:.2rem;">
+      {% if pedido.bultos %}
+      {{ pedido.bultos }} bultos pedido
+      {% if pedido.anexos %}
+      + {{ pedido.total_bultos_final - pedido.bultos }} en {{ pedido.anexos|length }} anexo{{ 's' if
+      pedido.anexos|length > 1 else '' }}
+      {% endif %}
+      {% else %}
+      <span style="color:#fbbf24;"> Bultos del pedido aún no registrados</span>
+      {% endif %}
+
+      {% if pedido.tiempo_laboral and pedido.tiempo_laboral.minutos_totales > 0 %}
+      <div
+        style="font-size:.78rem; opacity:.85; margin-top:.4rem; display:flex; gap:.6rem; justify-content:center; flex-direction:column; align-items:center;">
+        <div style="display:flex; gap:.6rem;">
+          <span>⏱ Bruto: <strong>{{ pedido.tiempo_laboral.texto_total }}</strong></span>
+          <span> Neto (Dcto. Almuerzo): <strong>{{ pedido.tiempo_laboral.texto_regulares }}</strong></span>
+        </div>
+        <div style="font-size:0.7rem; margin-top:2px; color:rgba(255,255,255,0.7);">* No se cuenta la hora de almuerzo
+          en la duración.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="tf-num">{{ pedido.total_bultos_final }}</div>
+</div>
+
+<!-- Acción exportar al final también -->
+<div class="mt-4 text-center">
+  <a href="/exportar/{{ pedido.id }}" class="btn btn-primary"
+    style="display:inline-flex; width:auto; background:#16a34a;">
+     Exportar a Excel (Formato Físico)
+  </a>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/detalle.js') }}"></script>
+<script>
+  /** Lógica para el modal de retiro en la vista de detalle */
+  function abrirModalRetiro(id, marca) {
+    const modal = document.getElementById('modal-retiro');
+    const desc = document.getElementById('modal-desc');
+    const form = document.getElementById('form-retiro');
+    const input = document.getElementById('modal-persona');
+    
+    if (desc) desc.textContent = `Pedido #${id} de ${marca} (Retiro directo)`;
+    if (form) form.action = `/retirar/${id}`;
+    if (input) input.value = '';
+    
+    if (modal) {
+        modal.classList.add('open');
+        setTimeout(() => input && input.focus(), 150);
+    }
+  }
+
+  function cerrarModal() {
+    const modal = document.getElementById('modal-retiro');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function confirmarRetiro() {
+    const persona = document.getElementById('modal-persona').value.trim();
+    if (!persona) {
+      document.getElementById('modal-persona').focus();
+      return;
+    }
+    document.getElementById('campo-retirado-por').value = persona;
+
+    // Sincronizar bultos del formulario principal antes de retirar
+    const mainBultos = document.querySelector('input[name="bultos"]');
+    const campoBultos = document.getElementById('campo-bultos-retiro');
+    if (mainBultos && mainBultos.value && campoBultos) {
+      campoBultos.value = mainBultos.value;
+    }
+
+    document.getElementById('form-retiro').submit();
+  }
+
+  // Enter para confirmar
+  document.getElementById('modal-persona')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmarRetiro();
+    }
+  });
+</script>
+
+<!-- Modal de Retiro (Copiado de registros para consistencia) -->
+<div class="modal-overlay" id="modal-retiro">
+  <div class="modal-box glass" style="max-width:400px;">
+    <h3> Confirmar Retiro Directo</h3>
+    <p id="modal-desc" class="modal-desc" style="margin-bottom:1.5rem; font-size:.9rem; color:#666;"></p>
+
+    <div class="form-group">
+      <label for="modal-persona">¿Quién retira el pedido?</label>
+      <input type="text" id="modal-persona" list="lista-personas-modal" placeholder="Nombre de la persona..."
+        style="width:100%; padding:.75rem; border:1px solid var(--border); border-radius:8px;">
+    </div>
+
+    <datalist id="lista-personas-modal">
+      {% for p in personas %}<option value="{{ p['nombre'] }}">{% endfor %}
+    </datalist>
+
+    <form id="form-retiro" method="POST" action="">
+      <input type="hidden" name="retirado_por" id="campo-retirado-por">
+      <input type="hidden" name="bultos" id="campo-bultos-retiro">
+      <div class="modal-actions" style="display:flex; gap:.75rem; justify-content:flex-end; margin-top:1.5rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="cerrarModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" style="background:#15803d; border:none;"
+          onclick="confirmarRetiro()">Confirmar Retiro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!--  Barra de Acciones en Lote para Pasillos  -->
+<div class="batch-action-bar" id="batch-secciones-bar">
+  <div class="batch-content">
+    <div class="batch-info">
+      <span class="batch-count" id="batch-secciones-count">0</span>
+      <span class="batch-text">seleccionadas</span>
+    </div>
+    
+    <div class="batch-inputs">
+      <input type="text" id="batch-secciones-persona" list="lista-personal-bodega" placeholder="Responsable..." 
+             style="width:160px; padding:.45rem .8rem; border-radius:30px; border:none; font-size:.8rem;">
+      <input type="datetime-local" id="batch-secciones-hora" 
+             style="width:180px; padding:.45rem .8rem; border-radius:30px; border:none; font-size:.8rem;">
+    </div>
+
+    <div class="batch-actions-btns">
+      <button class="btn-batch btn-batch-ship" onclick="reclamarSeccionesMasivo()">
+          Reclamar Seleccionadas
+      </button>
+      <button class="btn-batch btn-batch-cancel" onclick="limpiarSeleccionSecciones()">
+         
+      </button>
+    </div>
+  </div>
+</div>
+
+<!--  Barra de Acciones en Lote para Hojas  -->
+<div class="batch-action-bar" id="batch-hojas-bar">
+  <div class="batch-content">
+    <div class="batch-info">
+      <span class="batch-count" id="batch-hojas-count">0</span>
+      <span class="batch-text">seleccionadas</span>
+    </div>
+    
+    <div class="batch-inputs">
+      <input type="text" id="batch-hojas-persona" list="lista-personal-bodega" placeholder="Responsable..." 
+             style="width:160px; padding:.45rem .8rem; border-radius:30px; border:none; font-size:.8rem;">
+      <input type="datetime-local" id="batch-hojas-hora" 
+             style="width:180px; padding:.45rem .8rem; border-radius:30px; border:none; font-size:.8rem;">
+    </div>
+
+    <div class="batch-actions-btns">
+      <button class="btn-batch btn-batch-ship" onclick="reclamarHojasMasivo()">
+          Reclamar Seleccionadas
+      </button>
+      <button class="btn-batch btn-batch-cancel" onclick="limpiarSeleccionHojas()">
+         
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

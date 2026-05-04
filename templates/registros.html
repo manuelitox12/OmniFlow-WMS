@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+<!--
+  registros.html — Tablero de control de pedidos
+  ================================================
+  v6: Implementación de Tabs, Búsqueda en tiempo real y UI modernizada.
+-->
+
+{% block title %}Tablero de Pedidos{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/registros.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-header">
+  <div class="header-main">
+    <h1>Tablero <em>Dinámico</em></h1>
+    <p>Gestiona el ciclo de vida de los pedidos con eficiencia.</p>
+  </div>
+  
+  <div class="header-actions">
+    <div class="search-box">
+      <span class="search-icon"></span>
+      <input type="text" id="dashboard-search" placeholder="Filtrar por marca, ID o bultos..." onkeyup="filtrarTablero()">
+    </div>
+    <div class="export-options">
+      <a href="/exportar/listos" class="btn-xlsx-alt" title="Exporta pedidos en estado Empacado">
+         <span class="icon"><i class="ph ph-file-csv"></i></span> Exportar Listos
+      </a>
+      <a href="/exportar/retirados?q={{ busqueda }}&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}" class="btn-xlsx-main" title="Exporta el historial según los filtros actuales">
+         <span class="icon"><i class="ph ph-file-csv"></i></span> Exportar Historial
+      </a>
+    </div>
+  </div>
+</div>
+
+<!--  Stats Panel  -->
+<div class="stats-panel">
+  <div class="stat-card">
+    <div class="stat-info">
+      <span class="stat-label">Activos</span>
+      <span class="stat-value">{{ activos_proceso|length + activos_empacados|length }}</span>
+    </div>
+    <div class="stat-icon"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-info">
+      <span class="stat-label">Bultos en Curso</span>
+      <span class="stat-value">{{ total_bultos_activos }}</span>
+    </div>
+    <div class="stat-icon"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-info">
+      <span class="stat-label">Retirados</span>
+      <span class="stat-value">{{ historial|length }}</span>
+    </div>
+    <div class="stat-icon"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-info">
+      <span class="stat-label">Bultos Retirados</span>
+      <span class="stat-value">{{ total_bultos_historial }}</span>
+    </div>
+    <div class="stat-icon"></div>
+  </div>
+</div>
+
+<!--  Navigation Tabs  -->
+<div class="tab-container">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="verTab('tab-activos')">
+       Activos <span class="tab-count">{{ activos_proceso|length + activos_empacados|length }}</span>
+    </button>
+    <button class="tab-btn" onclick="verTab('tab-historial')">
+       Historial <span class="tab-count">{{ historial|length }}</span>
+    </button>
+    {% if eliminados %}
+    <button class="tab-btn" onclick="verTab('tab-papelera')">
+       Papelera <span class="tab-count">{{ eliminados|length }}</span>
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="tab-content-wrapper">
+    
+    <!-- 🟢 TAB 1: ACTIVOS -->
+    <div id="tab-activos" class="tab-pane active">
+      
+      <!-- SUB-SECCION: EN PROCESO -->
+      <div class="sub-header">
+        <h2><i class="ph ph-spinner-gap"></i> Pedidos en Proceso</h2>
+        
+        <div class="sort-controls">
+          <a href="{{ url_for('registros.registros', sort='prioridad') }}" class="btn-sort {% if sort_mode == 'prioridad' %}active{% endif %}"> Prioridad</a>
+          <a href="{{ url_for('registros.registros', sort='viejo') }}" class="btn-sort {% if sort_mode == 'viejo' %}active{% endif %}"> Viejos</a>
+          <a href="{{ url_for('registros.registros', sort='nuevo') }}" class="btn-sort {% if sort_mode == 'nuevo' %}active{% endif %}"> Nuevos</a>
+        </div>
+      </div>
+
+      <div class="table-container shadow-sm">
+        <table class="modern-table" id="tabla-proceso">
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all-proceso" onclick="seleccionarTodo('tabla-proceso', this.checked)"></th>
+              <th style="width: 80px;"># Mes</th>
+              <th style="width: 100px;">Interno</th>
+              <th>Marca / Pedido</th>
+              <th>Tipo</th>
+              <th>Bultos</th>
+              <th>Estado</th>
+              <th>Tiempos</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in activos_proceso %}
+            <tr data-search="{{ p.marca|lower }} {{ p.id }} {{ p.correlativo_mes or '' }}" data-id="{{ p.id }}">
+              <td style="text-align: center;">
+                <input type="checkbox" class="row-checkbox" value="{{ p.id }}" data-marca="{{ p.marca | e }}" data-tipo="{{ p.tipo }}" data-estado="{{ p.estado }}" onchange="actualizarBarraAcciones()">
+              </td>
+              <td class="col-num">
+                {% if p.correlativo_mes %}
+                  <span class="mensual-id">#{{ p.correlativo_mes }}</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td class="col-id">#{{ p.id }}</td>
+              <td class="col-marca"><strong>{{ p.marca }}</strong></td>
+              <td>
+                <span class="badge-tipo {{ 'badge-directo' if p.tipo == 'directo' else 'badge-empaque' }}">
+                  {{ '<i class="ph ph-truck"></i> Directo'|safe if p.tipo == 'directo' else '<i class="ph ph-package"></i> Empaque'|safe }}
+                </span>
+              </td>
+              <td>
+                <span class="bultos-badge {{ 'warn' if not p.bultos else '' }}">
+                  {{ p.bultos or '?' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge-estado {{ 'badge-pendiente' if p.estado == 'pendiente' else 'badge-empacando' }}">
+                  {{ '<i class="ph ph-circle"></i> Pendiente'|safe if p.estado == 'pendiente' else '<i class="ph ph-spinner-gap"></i> Empacando'|safe }}
+                </span>
+              </td>
+              <td class="col-tiempo">
+                {% if p.tipo == 'directo' %}
+                  <span class="muted italic">Sin empaque</span>
+                {% elif p.tiempo_laboral %}
+                  <div class="time-summary">
+                    <span class="time-main">⏱ {{ p.tiempo_laboral.texto_total }}</span>
+                    {% if p.tiempo_laboral.minutos_totales > p.tiempo_laboral.minutos_regulares %}
+                      <span class="time-extra" style="background:rgba(21,94,117,0.1); color:var(--navy); font-size:.65rem; border:1px solid rgba(21,94,117,0.2);">
+                         Neto: {{ p.tiempo_laboral.texto_regulares }}
+                      </span>
+                    {% endif %}
+                    {% if p.tiempo_laboral.minutos_extras > 0 %}
+                      <span class="time-extra"> {{ p.tiempo_laboral.texto_extras }}</span>
+                    {% endif %}
+                  </div>
+                {% elif p.inicio_empaque %}
+                  <span class="time-pulse"> Corriendo desde {{ p.inicio_empaque | str_to_time }}</span>
+                {% else %}
+                  <span class="muted">Recibido {{ p.fecha | str_to_time }}</span>
+                {% endif %}
+              </td>
+              <td class="col-actions">
+                <div class="action-grid">
+                  <a href="/pedido/{{ p.id }}" class="btn-act btn-view" title="Ver Detalle"><i class="ph ph-eye"></i> Detalle</a>
+                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel" title="Exportar Excel"><i class="ph ph-download-simple"></i></a>
+                  
+                  {% if p.tipo == 'directo' %}
+                    <button class="btn-act btn-ship" 
+                            data-id="{{ p.id }}" 
+                            data-marca="{{ p.marca | e }}" 
+                            onclick="abrirModalRetiro(this.dataset.id, this.dataset.marca, 'directo')">
+                       Retirar
+                    </button>
+                  {% else %}
+                    {% if p.estado == 'pendiente' %}
+                      <form action="/iniciar_empaque/{{ p.id }}" method="POST"><button type="submit" class="btn-act btn-play"><i class="ph ph-play"></i> Iniciar</button></form>
+                    {% elif p.estado == 'empacando' %}
+                      <div style="display:flex; gap:4px; align-items:center;">
+                        <form action="/terminar_empaque/{{ p.id }}" method="POST"><button type="submit" class="btn-act btn-stop"><i class="ph ph-stop"></i> Fin</button></form>
+                        <form action="/pedido/{{ p.id }}/reset_empaque" method="POST" onsubmit="return confirm('¿Reiniciar a Pendiente?')">
+                          <button type="submit" class="btn-act btn-del" style="background:#ef4444; padding: 4px 6px;" title="Reiniciar Estado (Volver a Pendiente)">↺</button>
+                        </form>
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                  
+                  <form action="/eliminar/{{ p.id }}" method="POST" 
+                        data-marca="{{ p.marca | e }}" 
+                        onsubmit="return confirmarEliminar(this.dataset.marca)">
+                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not activos_proceso %}
+            <tr><td colspan="8" class="empty-row">No hay pedidos en fase inicial.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SUB-SECCION: LISTOS PARA RETIRAR -->
+      <div class="sub-header" style="margin-top: 2.5rem;">
+        <h2> Listos para Retirar (Empacados)</h2>
+      </div>
+      
+      <div class="table-container shadow-sm border-success">
+        <table class="modern-table table-success" id="tabla-listos">
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all-listos" onclick="seleccionarTodo('tabla-listos', this.checked)"></th>
+              <th style="width: 80px;"># Mes</th>
+              <th style="width: 100px;">Interno</th>
+              <th>Marca / Pedido</th>
+              <th>Bultos</th>
+              <th>Estado</th>
+              <th>Tiempo Total</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in activos_empacados %}
+            <tr data-search="{{ p.marca|lower }} {{ p.id }} {{ p.correlativo_mes or '' }}" data-id="{{ p.id }}">
+              <td style="text-align: center;">
+                <input type="checkbox" class="row-checkbox" value="{{ p.id }}" data-marca="{{ p.marca | e }}" data-tipo="{{ p.tipo }}" data-estado="{{ p.estado }}" onchange="actualizarBarraAcciones()">
+              </td>
+              <td class="col-num"><span class="mensual-id success">#{{ p.correlativo_mes }}</span></td>
+              <td class="col-id">#{{ p.id }}</td>
+              <td class="col-marca"><strong>{{ p.marca }}</strong></td>
+              <td><span class="bultos-badge success">{{ p.bultos or 0 }}</span></td>
+              <td><span class="badge-estado badge-empacado">🟢 Empacado</span></td>
+              <td class="col-tiempo">
+                {% if p.tiempo_laboral %}
+                  <div class="time-summary">
+                    <span class="time-main">⏱ {{ p.tiempo_laboral.texto_total }}</span>
+                    {% if p.tiempo_laboral.minutos_totales > p.tiempo_laboral.minutos_regulares %}
+                      <span class="time-extra" style="background:rgba(21,94,117,0.1); color:var(--navy); font-size:.65rem; border:1px solid rgba(21,94,117,0.2);">
+                         Neto: {{ p.tiempo_laboral.texto_regulares }}
+                      </span>
+                    {% endif %}
+                    {% if p.tiempo_laboral.minutos_extras > 0 %}
+                      <span class="time-extra"> {{ p.tiempo_laboral.texto_extras }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td class="col-actions">
+                <div class="action-grid">
+                  <a href="/pedido/{{ p.id }}" class="btn-act btn-view"><i class="ph ph-eye"></i> Detalle</a>
+                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel"><i class="ph ph-download-simple"></i></a>
+                  <button class="btn-act btn-ship-heavy" 
+                          data-id="{{ p.id }}" 
+                          data-marca="{{ p.marca | e }}" 
+                          onclick="abrirModalRetiro(this.dataset.id, this.dataset.marca, 'empaque')">
+                     Retirar
+                  </button>
+                  <form action="/eliminar/{{ p.id }}" method="POST" 
+                        data-marca="{{ p.marca | e }}" 
+                        onsubmit="return confirmarEliminar(this.dataset.marca)">
+                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not activos_empacados %}
+            <tr><td colspan="7" class="empty-row">No hay pedidos pendientes de retiro.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!--  TAB 2: HISTORIAL -->
+    <div id="tab-historial" class="tab-pane">
+      <div class="sub-header">
+        <h2> Historial de Retirados</h2>
+        
+        <form method="GET" action="/registros" class="filter-form">
+          <select name="tipo" style="padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); font-size: 0.85rem; background: var(--surface); color: var(--navy); font-weight: 500;">
+            <option value=""> Todos los Tipos</option>
+            <option value="empaque" {% if tipo_filter == 'empaque' %}selected{% endif %}> Empaque</option>
+            <option value="directo" {% if tipo_filter == 'directo' %}selected{% endif %}> Directo</option>
+          </select>
+          <input type="date" name="fecha_ini" value="{{ fecha_ini }}" title="Desde">
+          <input type="date" name="fecha_fin" value="{{ fecha_fin }}" title="Hasta">
+          <button type="submit" class="btn-icon"></button>
+          <a href="/registros?ver_todo=1" class="btn-text">Ver Todo</a>
+          {% if historial %}
+            <a href="{{ url_for('exportar.exportar_retirados', q=busqueda, fecha_ini=fecha_ini, fecha_fin=fecha_fin, tipo=tipo_filter) }}" 
+               class="btn-text" style="color: #16a34a; font-weight: bold; margin-left: 10px;">
+                Exportar Excel
+            </a>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="table-container shadow-sm">
+        <table class="modern-table" id="tabla-historial">
+          <thead>
+            <tr>
+              <th style="width: 80px;">#</th>
+              <th>Marca / Pedido</th>
+              <th>Bultos</th>
+              <th>Retirado Por</th>
+              <th>Fecha Retiro</th>
+              <th>T. Empaque</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in historial %}
+            <tr data-search="{{ p.marca|lower }} {{ p.id }} {{ p.correlativo_mes or '' }} {{ p.retirado_por|lower }}">
+              <td class="col-num">
+                {% if p.correlativo_mes %}<div class="mensual-id small">#{{ p.correlativo_mes }}</div>{% endif %}
+                <div class="muted small">ID #{{ p.id }}</div>
+              </td>
+              <td class="col-marca"><strong>{{ p.marca }}</strong></td>
+              <td><span class="bultos-badge">{{ p.bultos or '—' }}</span></td>
+              <td class="italic">{{ p.retirado_por or '—' }}</td>
+              <td class="col-date">{{ p.retirado_en | str_to_time }}</td>
+              <td class="col-tiempo">
+                {% if p.tiempo_laboral %}
+                  <div class="time-summary">
+                    <span class="time-main small" style="display:block;">⏱ {{ p.tiempo_laboral.texto_total }}</span>
+                    {% if p.tiempo_laboral.minutos_totales > p.tiempo_laboral.minutos_regulares %}
+                      <span class="time-extra" style="background:rgba(21,94,117,0.1); color:var(--navy); font-size:.6rem; border:1px solid rgba(21,94,117,0.2); padding: 1px 4px; border-radius:4px;">
+                         Neto: {{ p.tiempo_laboral.texto_regulares }}
+                      </span>
+                    {% endif %}
+                  </div>
+                {% else %}—{% endif %}
+              </td>
+              <td class="col-actions">
+                <div class="action-grid">
+                  <a href="/pedido/{{ p.id }}" class="btn-act btn-view"></a>
+                  <button type="button" class="btn-act btn-edit-mini" 
+                          data-id="{{ p.id }}" 
+                          data-marca="{{ p.marca | e }}" 
+                          data-persona="{{ p.retirado_por | e }}"
+                          data-fecha="{{ p.retirado_en[:16].replace(' ', 'T') if p.retirado_en else '' }}"
+                          onclick="abrirModalEditarRetiro(this.dataset)">
+                    
+                  </button>
+                  <a href="/exportar/{{ p.id }}" class="btn-act btn-excel"><i class="ph ph-download-simple"></i></a>
+                  <form action="/eliminar/{{ p.id }}" method="POST" 
+                        data-marca="{{ p.marca | e }}" 
+                        onsubmit="return confirmarEliminar(this.dataset.marca)">
+                    <button type="submit" class="btn-act btn-del"><i class="ph ph-trash"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not historial %}
+            <tr><td colspan="7" class="empty-row">No hay registros históricos.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!--  TAB 3: PAPELERA -->
+    <div id="tab-papelera" class="tab-pane">
+      <div class="sub-header">
+        <h2> Pedidos Eliminados</h2>
+        <p class="muted small">Puedes restaurarlos para que vuelvan al tablero.</p>
+      </div>
+
+      <div class="table-container border-danger shadow-sm">
+        <table class="modern-table table-muted" id="tabla-papelera">
+          <thead>
+            <tr>
+              <th style="width: 80px;">ID</th>
+              <th>Marca / Pedido</th>
+              <th>Bultos</th>
+              <th>Estado Previo</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in eliminados %}
+            <tr data-search="{{ p.marca|lower }} {{ p.id }}">
+              <td class="col-id">#{{ p.id }}</td>
+              <td class="col-marca deleted"><strong>{{ p.marca }}</strong></td>
+              <td><span class="muted">{{ p.bultos or '—' }}</span></td>
+              <td><span class="badge-estado">{{ p.estado }}</span></td>
+              <td class="col-actions">
+                <form action="/restaurar/{{ p.id }}" method="POST">
+                  <button type="submit" class="btn-restore">↩ Restaurar Pedido</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!--  Modal para marcar como retirado (Sin cambios en lógica)  -->
+<div class="modal-overlay" id="modal-retiro">
+  <div class="modal-box glass">
+    <h3 id="modal-titulo"> Confirmar Retiro</h3>
+    <p id="modal-desc" class="modal-desc"></p>
+    
+    <div class="form-group">
+      <label for="modal-persona">¿Quién retira? (Transportista / Cliente)</label>
+      <input type="text" id="modal-persona" list="lista-personas-modal" placeholder="Nombre completo...">
+    </div>
+
+    <div class="form-group" style="margin-top: 0.8rem;">
+      <label for="modal-fecha">Fecha y Hora de Retiro (Opcional)</label>
+      <input type="datetime-local" id="modal-fecha" name="retirado_en">
+      <p style="font-size:0.65rem; color:var(--muted); margin-top:0.2rem;">Por defecto se guardará la hora actual.</p>
+    </div>
+    
+    <datalist id="lista-personas-modal">
+      {% for p in personas %}<option value="{{ p['nombre'] }}">{% endfor %}
+    </datalist>
+
+    <form id="form-retiro" method="POST" action="">
+      <input type="hidden" name="retirado_por" id="campo-retirado-por">
+      <input type="hidden" name="retirado_en" id="campo-retirado-en">
+      
+      <!-- Campo dinámico para bultos (se muestra si el pedido no los tiene) -->
+      <div class="form-group" id="modal-group-bultos" style="display:none; margin-top:1rem; border-top:1px solid var(--border); padding-top:1rem;">
+        <label for="modal-bultos" style="color:var(--danger); font-weight:700;"> Cantidad de Bultos Final</label>
+        <input type="number" name="bultos" id="modal-bultos" min="1" step="1" placeholder="Ej: 15">
+        <p style="font-size:.65rem; color:var(--muted); margin-top:.3rem;">Este pedido no tiene bultos registrados. Es obligatorio para continuar.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+        <button type="button" class="btn-confirm" id="btn-confirmar-retiro" onclick="confirmarRetiro()">Confirmar Retiro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!--  Barra de Acciones en Lote (Bulk Actions)  -->
+<div class="batch-action-bar" id="batch-bar">
+  <div class="batch-content">
+    <div class="batch-info">
+      <span class="batch-count" id="batch-count">0</span>
+      <span class="batch-text">pedidos seleccionados</span>
+    </div>
+    
+    <div class="batch-actions-btns">
+      <button class="btn-batch btn-batch-ship" onclick="abrirRetiroMasivo()">
+          Retirar Seleccionados
+      </button>
+      <button class="btn-batch btn-batch-cancel" onclick="limpiarSeleccion()">
+          Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/registros.js') }}"></script>
+{% endblock %}

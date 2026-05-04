@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Rendimiento de Personal{% endblock %}
+
+{% block extra_head %}
+<style>
+  :root {
+    --card-shadow: 0 4px 20px rgba(13, 42, 110, 0.08);
+  }
+
+  .stats-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+  }
+
+  .stats-header {
+    margin-bottom: 2.5rem;
+    text-align: center;
+  }
+
+  .stats-header h1 {
+    font-family: var(--font-head);
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .stats-header p {
+    color: var(--muted);
+    font-size: 1.1rem;
+  }
+
+  .grid-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .employee-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .employee-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(13, 42, 110, 0.12);
+  }
+
+  .emp-name {
+    font-family: var(--font-head);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .emp-name span {
+    font-size: 1.5rem;
+  }
+
+  .stat-group {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-group:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .stat-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .stat-val {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-val .label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+  }
+
+  .stat-val .value {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--navy);
+  }
+
+  .stat-val .value small {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #64748b;
+  }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    background: var(--surface2);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 4rem 2rem;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .badge-count {
+    background: var(--surface2);
+    color: var(--navy);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 100px;
+    font-weight: 600;
+  }
+
+  .btn-detail {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--navy);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.6rem;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+  }
+
+  .btn-detail:hover {
+    background: var(--surface2);
+    border-color: var(--navy);
+  }
+
+  .detail-list {
+    display: none;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--border);
+    font-size: 0.8rem;
+  }
+
+  .detail-item {
+    display: grid;
+    grid-template-columns: 70px 1fr auto;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .detail-item:last-child {
+    border-bottom: none;
+  }
+
+  .detail-type {
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    font-size: 0.65rem;
+  }
+
+  .detail-ref {
+    color: var(--navy);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-time {
+    font-family: var(--font-mono);
+    color: #16a34a;
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro render_card(s) %}
+<div class="employee-card">
+  <div class="emp-name">
+    <span></span> {{ s.nombre }}
+  </div>
+
+  {% if s.picking.total > 0 %}
+  <div class="stat-group">
+    <div class="stat-title"> Picking (Pasillos) <span class="badge-count">{{ s.picking.total }}</span></div>
+    <div class="stat-grid">
+      <div class="stat-val">
+        <span class="label">Prm. Pasillo</span>
+        <span class="value">{{ s.picking.avg }} <small>min</small></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if s.digitacion_empaque.total > 0 %}
+  <div class="stat-group">
+    <div class="stat-title">⌨ Oficina (Pedidos Empaque) <span class="badge-count">{{ s.digitacion_empaque.total }}</span></div>
+    <div class="stat-grid">
+      <div class="stat-val">
+        <span class="label">Prm. Registro</span>
+        <span class="value">{{ s.digitacion_empaque.avg }} <small>min</small></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if s.digitacion_directo.total > 0 %}
+  <div class="stat-group">
+    <div class="stat-title">⌨ Oficina (Pedidos Directos) <span class="badge-count">{{ s.digitacion_directo.total }}</span></div>
+    <div class="stat-grid">
+      <div class="stat-val">
+        <span class="label">Prm. Registro</span>
+        <span class="value">{{ s.digitacion_directo.avg }} <small>min</small></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if s.empaque.total > 0 %}
+  <div class="stat-group">
+    <div class="stat-title"> Empaque/Dictado <span class="badge-count">{{ s.empaque.total }}</span></div>
+    <div class="stat-grid">
+      <div class="stat-val">
+        <span class="label">Prm. Pedido</span>
+        <span class="value">{{ s.empaque.avg_pedido }} <small>min</small></span>
+      </div>
+      <div class="stat-val">
+        <span class="label">Prm. Bulto</span>
+        <span class="value">{{ s.empaque.avg_bulto }} <small>min</small></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if s.detalles_recientes %}
+  <button class="btn-detail" data-id="{{ s.id }}" onclick="toggleDetalle(this.dataset.id)">
+     <span id="btn-txt-{{ s.id }}">Ver últimas actividades</span>
+  </button>
+  <div class="detail-list" id="detail-{{ s.id }}">
+    {% for det in s.detalles_recientes %}
+    <div class="detail-item">
+      <span class="detail-type">{{ det.tipo }}</span>
+      <span class="detail-ref" title="{{ det.ref }}">{{ det.ref }}</span>
+      <span class="detail-time">{{ det.tiempo }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div class="stats-container">
+  <header class="stats-header">
+    <h1>Rendimiento de Personal</h1>
+    <p>Análisis de productividad dividido por área de trabajo.</p>
+  </header>
+
+  <!--  SECCIÓN: DIGITADORES Y EMPAQUE -->
+  <div style="margin-bottom: 3rem;">
+    <h2 style="font-family: var(--font-head); font-size: 1.5rem; color: var(--navy); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+      <span style="background: var(--surface2); padding: .5rem; border-radius: 12px;">⌨</span> Oficina y Empaque
+    </h2>
+    <div class="grid-stats">
+      {% for s in stats_digitadores %}
+        {{ render_card(s) }}
+      {% else %}
+        <div class="empty-state">No hay datos de digitación o empaque registrados aún.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!--  SECCIÓN: PASILLOS / PISO -->
+  <div>
+    <h2 style="font-family: var(--font-head); font-size: 1.5rem; color: var(--navy); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+      <span style="background: var(--surface2); padding: .5rem; border-radius: 12px;"></span> Personal de Pasillos (Piso)
+    </h2>
+    <div class="grid-stats">
+      {% for s in stats_pasillos %}
+        {{ render_card(s) }}
+      {% else %}
+        <div class="empty-state">No hay datos de picking en pasillos registrados aún.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleDetalle(id) {
+  const list = document.getElementById(`detail-${id}`);
+  const txt = document.getElementById(`btn-txt-${id}`);
+  if (list && list.style.display === 'block') {
+    list.style.display = 'none';
+    txt.innerText = 'Ver últimas actividades';
+  } else if (list) {
+    list.style.display = 'block';
+    txt.innerText = 'Ocultar actividades';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# requirements.txt — Dependencias del Sistema de Bodega
+# ══════════════════════════════════════════════════════════════════════════════
+# Instalar con: pip install -r requirements.txt
+# Para entorno virtual: python -m venv venv && venv\Scripts\activate (Windows)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Core
+flask>=3.0
+werkzeug>=3.0
+
+# Reportes Excel
+openpyxl>=3.1
+
+# Servidor de producción (Windows)
+waitress>=3.0

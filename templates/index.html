@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+<!--
+  index.html — Formulario de registro de pedido
+  ===============================================
+  v2: Agrega selector de tipo:
+    - empaque  → flujo completo con empaque
+    - directo  → retiro directo sin empaque
+-->
+
+{% block title %}Nuevo Pedido{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Nuevo <em>Pedido</em></h1>
+  <p>Registra un pedido en la bodega. Estará disponible en el tablero con estado <strong>pendiente</strong>.</p>
+</div>
+
+<div style="max-width: 560px;">
+  <div class="card">
+    <form action="/registrar" method="POST" id="form-pedido">
+
+      <!--  Campo 1: Tipo de pedido  -->
+      <div class="form-group">
+        <label><i class="ph ph-package"></i> Tipo de Pedido</label>
+        <div class="tipo-selector">
+
+          <label class="tipo-option">
+            <input
+              type="radio"
+              name="tipo"
+              value="empaque"
+              id="tipo-empaque"
+              checked
+              onchange="actualizarBanner()"
+            />
+            <div class="tipo-card">
+              <span class="tipo-icon"><i class="ph ph-box-arrow-up"></i></span>
+              <span class="tipo-name">Requiere empaque</span>
+              <span class="tipo-desc">Pasa por el proceso de empaque antes de retirarse</span>
+            </div>
+          </label>
+
+          <label class="tipo-option">
+            <input
+              type="radio"
+              name="tipo"
+              value="directo"
+              id="tipo-directo"
+              onchange="actualizarBanner()"
+            />
+            <div class="tipo-card">
+              <span class="tipo-icon"><i class="ph ph-truck"></i></span>
+              <span class="tipo-name">Retiro directo</span>
+              <span class="tipo-desc">Se retira de inmediato sin pasar por empaque</span>
+            </div>
+          </label>
+
+        </div>
+
+        <!-- Banner informativo dinámico -->
+        <div class="tipo-info-banner tipo-info-empaque" id="tipo-banner">
+           <i class="ph ph-git-merge"></i> Flujo: <strong>pendiente → empacando → empacado → retirado</strong>
+        </div>
+      </div>
+
+      <!--  Campo 2: Marca / Pedido  -->
+      <div class="form-group">
+        <label for="marca"><i class="ph ph-tag"></i> Marca / Pedido</label>
+        <input
+          type="text"
+          id="marca"
+          name="marca"
+          list="lista-marcas"
+          placeholder="Escribe o elige una marca..."
+          autocomplete="off"
+          required
+        />
+        <datalist id="lista-marcas">
+          {% for m in marcas %}
+            <option value="{{ m['nombre'] }}">
+          {% endfor %}
+        </datalist>
+      </div>
+
+      <!--  Campo 3: Fecha automática (visual, no enviada al server)  -->
+      <div class="form-group">
+        <label for="fecha"><i class="ph ph-calendar-blank"></i> Fecha y Hora</label>
+        <input type="text" id="fecha" name="fecha_display" readonly />
+      </div>
+
+      <div class="tipo-info-banner" style="background:rgba(13,42,110,.05);border-left:3px solid var(--navy);border-radius:6px;padding:.6rem .9rem;font-size:.8rem;color:var(--navy);margin-bottom:1.2rem; display:flex; align-items:center; gap:0.5rem;">
+         <i class="ph ph-info" style="font-size:1.2rem;"></i> La cantidad de <strong>bultos</strong> se registra durante el proceso de empaque, en la vista de Detalle.
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="btn-submit">
+         <i class="ph ph-plus-circle"></i> Crear Pedido
+      </button>
+
+    </form>
+  </div>
+
+  <div class="mt-4 text-center">
+    <a href="/registros" class="btn btn-secondary btn-sm"><i class="ph ph-kanban"></i> Ver tablero de pedidos</a>
+  </div>
+</div>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/index.js') }}"></script>
+{% endblock %}
