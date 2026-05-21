@@ -350,6 +350,9 @@
                           onclick="abrirModalEditarRetiro(this.dataset)">
                     <i class="ph ph-pencil-simple"></i> Editar
                   </button>
+                  <form action="/pedido/{{ p.id }}/deshacer_retiro" method="POST" onsubmit="return confirm('¿Seguro que deseas deshacer el retiro y devolver el pedido al tablero activo?')">
+                    <button type="submit" class="btn-act" style="background:#eab308; color:white; border-color:#eab308;" title="Devolver al Tablero"><i class="ph ph-arrow-u-up-left"></i> Deshacer</button>
+                  </form>
                   <a href="/exportar/{{ p.id }}" class="btn-act btn-excel" title="Exportar a Excel"><i class="ph ph-download-simple"></i> XLS</a>
                   <form action="/eliminar/{{ p.id }}" method="POST" 
                         data-marca="{{ p.marca | e }}" 

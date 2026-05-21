@@ -176,6 +176,39 @@ def editar_retiro(id):
     return redirect(url_for("registros.registros"))
 
 
+@pedidos_bp.route('/pedido/<int:id>/deshacer_retiro', methods=['POST'])
+def deshacer_retiro(id):
+    """Deshace el retiro de un pedido y lo devuelve al tablero activo."""
+    conn = get_db()
+    pedido = conn.execute("SELECT marca, tipo, inicio_empaque, fin_empaque, bultos FROM pedidos WHERE id=?", (id,)).fetchone()
+    if not pedido:
+        flash("Pedido no encontrado.", "error")
+        return redirect(url_for("registros.registros"))
+        
+    # Calcular estado previo
+    if pedido['tipo'] == 'directo':
+        nuevo_estado = 'pendiente'
+    else:
+        if pedido['fin_empaque']:
+            if pedido['bultos'] and int(pedido['bultos']) > 0:
+                nuevo_estado = 'empacado'
+            else:
+                nuevo_estado = 'empacando'
+        elif pedido['inicio_empaque']:
+            nuevo_estado = 'empacando'
+        else:
+            nuevo_estado = 'pendiente'
+            
+    conn.execute(
+        "UPDATE pedidos SET estado=?, retirado_por=NULL, retirado_en=NULL WHERE id=?",
+        (nuevo_estado, id)
+    )
+    conn.commit()
+    flash(f"↩ Retiro de {pedido['marca']} deshecho. El pedido ha vuelto al tablero.", "success")
+    return redirect(url_for("registros.registros"))
+
+
+
 @pedidos_bp.route('/retirar/batch', methods=['POST'])
 def confirmar_retiro_batch():
     ids_str      = request.form.get("ids", "").strip()
